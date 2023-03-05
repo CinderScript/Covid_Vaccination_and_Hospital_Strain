@@ -1,0 +1,98 @@
+---
+title: "Covid Hospitalization and Vaccination Study"
+author: "Gregory Maynard"
+date: "`r Sys.Date()`"
+output: openintro::lab_report
+---
+
+```{r load-packages, message=FALSE}
+library(tidyverse)
+library(openintro)
+
+library(httr)
+library(jsonlite)
+```
+
+
+# Variables
+
+```{r}
+# hospital data endpoint to soda api
+hospital_data_soda_endpoint <- "https://healthdata.gov/resource/anag-cw7u.json"
+
+# needed to avoid api throttling
+healthdata_soda_app_token <- "3tl81UiFuoaJ1DboeqMuy5K9U"
+```
+
+
+# Helper Functions
+
+```{r}
+get_soda_dataframe <- function(endpoint, simple_filter, where_filter, select_filter){
+  
+  #Build the query
+  soda_query = paste0(hospital_data_soda_endpoint, 
+            "?",                                      
+             simple_filter,
+             "&$where=", where_filter,
+             "&$select=", select_filter,
+             "&$$app_token=3tl81UiFuoaJ1DboeqMuy5K9U")
+  
+  # Getting response details in API
+  response_details = GET(url = URLencode(soda_query))
+  
+  # Getting status of HTTP Call
+  response_status_code = status_code(response_details)
+  
+  print(paste0("SODA http response: ", response_status_code))
+  
+  # Converting content to text
+  response_content_text = content(response_details,
+                            "text", encoding = "UTF-8")
+   
+  # Parse Json Data
+  response_content_json = fromJSON(response_content_text,
+                             flatten = TRUE)
+   
+  # Converting into dataframe
+  soda_dataframe = as.data.frame(response_content_json)
+}
+```
+
+
+# Data Sources
+
+## Hospital Capacity Data
+
+Hospital bed usage counts is obtained from HealthData.gov: https://healthdata.gov/Hospital/COVID-19-Reported-Patient-Impact-and-Hospital-Capa/anag-cw7u. This dataset is over 300 MB, so instead of downloading the whole dataset, this application accesses it through the SODA API.
+
+The "COVID-19 Reported Patient Impact and Hospital Capacity by Facility" provides data on hospital bed utilization that is aggregated weekly.
+
+The variables we are using are:
+* **Hospital_name** and **fips_code**
+* **inpatient_beds_7_day_avg**: Average number of total number of staffed inpatient beds in your hospital including all overflow, observation, and active surge/expansion beds used for inpatients (including all ICU beds) reported in the 7-day period.
+* **inpatient_beds_used_7_day_avg**: Average of total number of staffed inpatient beds that are occupied reported during the 7-day period.
+* **inpatient_beds_used_covid_7_day_avg**: Average of reported patients currently hospitalized in an inpatient bed who have suspected or confirmed COVID-19 reported during the 7-day period.
+
+*Inpatient bed counts are used instead of total bed counts because many hospitals that only have inpatient bed data do not include data for inpatient and outpatient totals.*
+
+```{r}
+
+soda_dataframe <- get_soda_dataframe(
+  endpoint = hospital_data_soda_endpoint,
+  simple_filter = "state=WA",
+  where_filter = "collection_week='2023-02-24'",
+  select_filter = "state,hospital_name,city,inpatient_beds_7_day_avg,inpatient_beds_used_7_day_avg,inpatient_beds_used_covid_7_day_avg")
+
+nrow(soda_dataframe)
+
+
+```
+
+
+
+
+```
+
+...
+
