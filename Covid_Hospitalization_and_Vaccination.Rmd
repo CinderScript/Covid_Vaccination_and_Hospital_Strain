@@ -129,7 +129,7 @@ We also calculate:
 ```{r}
 
 # get data
-hospital_bed_data <- get_healthdata_gov_bed_utilization_from_soda(date = '2023-02-24')
+hospital_bed_data <- get_healthdata_gov_bed_utilization_from_soda(date = '2021/09/24')
 
 # calculate ratios
 hospital_bed_data <- hospital_bed_data %>% 
@@ -159,7 +159,7 @@ wa_counties_map_geometry <- counties_sf() %>%
 Hospitals are grouped by county using their fips code and then averages for bed ratios are calculated for each county.
 
 ```{r}
-bed_ratios <- hospital_bed_data %>% 
+county_bed_ratios <- hospital_bed_data %>% 
   group_by(fips_code) %>% 
   summarise(
     bed_usage_ratio = mean(bed_usage_ratio, na.rm = TRUE), 
@@ -185,6 +185,22 @@ us_county_map_geometry %>%
   ggplot() +
   geom_sf(aes(fill = covid_bed_usage_ratio)) +
   my_map_theme()
+
+```
+```{r}
+
+  
+```
+
+```{r}
+library(sf)
+
+hhr_region_map <- st_read("hhr/Hrr98Bdry_AK_HI_unmodified.shp")
+
+projection <- st_transform(hhr_region_map, 'EPSG:2163')
+
+ggplot(projection) +
+  geom_sf()
 
 ```
 
