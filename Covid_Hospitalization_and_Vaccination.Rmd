@@ -70,13 +70,17 @@ get_soda_dataframe <- function(endpoint, simple_filter = NULL, where_filter, sel
 get_healthdata_gov_bed_utilization_from_soda <- function(date){
   get_soda_dataframe(
     endpoint = hospital_data_soda_endpoint,
-    simple_filter = "state='WA'",
+    
+  # simple_filter = "state='WA'",  # can add for smaller dataset for testing (fast soda api call)
+    
     where_filter = "collection_week='2023-02-24'",
-    select_filter = "state,hospital_name,city,inpatient_beds_7_day_avg,inpatient_beds_used_7_day_avg,inpatient_beds_used_covid_7_day_avg",
+    select_filter = "state,hospital_name,city,fips_code,inpatient_beds_7_day_avg,inpatient_beds_used_7_day_avg,inpatient_beds_used_covid_7_day_avg",
+    limit = 10000,
     app_token = healthdata_soda_app_token) %>% 
     
     # convert values to numeric
     mutate(
+      fips_code = as.numeric(fips_code),
       inpatient_beds_7_day_avg = as.numeric(inpatient_beds_7_day_avg),
       inpatient_beds_used_7_day_avg = as.numeric(inpatient_beds_used_7_day_avg),
       inpatient_beds_used_covid_7_day_avg = as.numeric(inpatient_beds_used_covid_7_day_avg)) %>% 
@@ -135,24 +139,52 @@ hospital_bed_data <- hospital_bed_data %>%
     covid_bed_usage_total_bed_usage_ratio = inpatient_beds_used_covid_7_day_avg / inpatient_beds_used_7_day_avg
   )
 
-nrow(hospital_bed_data)
-
 ```
+
 
 Get Map Geometry
 
 ```{r}
 
 us_county_map_geometry <- counties_sf("laea") %>% 
-  mutate(fips_numeric = as.numeric(as.character(fips)))
+  mutate(fips = as.numeric(as.character(fips)))
 
-wa_counties_map_geometry <- us_county_map_geometry %>% 
+wa_counties_map_geometry <- counties_sf() %>% 
+  mutate(fips = as.numeric(as.character(fips))) %>% 
   filter(iso_3166_2 == "WA")
 
 
 ```
 
+Hospitals are grouped by county using their fips code and then averages for bed ratios are calculated for each county.
+
 ```{r}
+bed_ratios <- hospital_bed_data %>% 
+  group_by(fips_code) %>% 
+  summarise(
+    bed_usage_ratio = mean(bed_usage_ratio, na.rm = TRUE), 
+    covid_bed_usage_ratio = mean(covid_bed_usage_ratio, na.rm = TRUE), 
+    covid_bed_usage_total_bed_usage_ratio = mean(covid_bed_usage_total_bed_usage_ratio, na.rm = TRUE))
+
+```
+
+
+
+graph covid bed usage ratio
+
+```{r}
+
+wa_counties_map_geometry %>% 
+  left_join(bed_ratios, by = c("fips" = "fips_code")) %>% 
+  ggplot() +
+  geom_sf(aes(fill = covid_bed_usage_ratio)) +
+  my_map_theme()
+
+us_county_map_geometry %>% 
+  left_join(bed_ratios, by = c("fips" = "fips_code")) %>% 
+  ggplot() +
+  geom_sf(aes(fill = covid_bed_usage_ratio)) +
+  my_map_theme()
 
 ```
 
