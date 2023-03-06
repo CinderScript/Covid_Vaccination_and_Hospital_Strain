@@ -6,9 +6,14 @@ output: openintro::lab_report
 ---
 
 ```{r load-packages, message=FALSE}
-library(tidyverse)
 library(openintro)
 
+library(tidyverse)
+
+# for map data
+library(albersusa)
+
+# for SODA API calls
 library(httr)
 library(jsonlite)
 ```
@@ -28,7 +33,8 @@ healthdata_soda_app_token <- "3tl81UiFuoaJ1DboeqMuy5K9U"
 # Helper Functions
 
 ```{r}
-get_soda_dataframe <- function(endpoint, simple_filter, where_filter, select_filter){
+# Returns a dataframe from the given soda api endpoint.
+get_soda_dataframe <- function(endpoint, simple_filter = NULL, where_filter, select_filter, limit = 1000, app_token){
   
   #Build the query
   soda_query = paste0(hospital_data_soda_endpoint, 
@@ -36,7 +42,8 @@ get_soda_dataframe <- function(endpoint, simple_filter, where_filter, select_fil
              simple_filter,
              "&$where=", where_filter,
              "&$select=", select_filter,
-             "&$$app_token=3tl81UiFuoaJ1DboeqMuy5K9U")
+             "&$limit=", limit,
+             "&$$app_token=", app_token)
   
   # Getting response details in API
   response_details = GET(url = URLencode(soda_query))
@@ -57,6 +64,40 @@ get_soda_dataframe <- function(endpoint, simple_filter, where_filter, select_fil
   # Converting into dataframe
   soda_dataframe = as.data.frame(response_content_json)
 }
+
+# gets dataframe with total inpatient beds, used inpatient beds, and used inpatient beds for covid patients, 
+# for each hospital on record for the week given (date)
+get_healthdata_gov_bed_utilization_from_soda <- function(date){
+  get_soda_dataframe(
+    endpoint = hospital_data_soda_endpoint,
+    simple_filter = "state='WA'",
+    where_filter = "collection_week='2023-02-24'",
+    select_filter = "state,hospital_name,city,inpatient_beds_7_day_avg,inpatient_beds_used_7_day_avg,inpatient_beds_used_covid_7_day_avg",
+    app_token = healthdata_soda_app_token) %>% 
+    
+    # convert values to numeric
+    mutate(
+      inpatient_beds_7_day_avg = as.numeric(inpatient_beds_7_day_avg),
+      inpatient_beds_used_7_day_avg = as.numeric(inpatient_beds_used_7_day_avg),
+      inpatient_beds_used_covid_7_day_avg = as.numeric(inpatient_beds_used_covid_7_day_avg)) %>% 
+
+    # replace negative bed counts with NA
+    mutate(
+      inpatient_beds_7_day_avg = ifelse(inpatient_beds_7_day_avg > -1, inpatient_beds_7_day_avg, NA),
+      inpatient_beds_used_7_day_avg = ifelse(inpatient_beds_used_7_day_avg > -1, inpatient_beds_used_7_day_avg, NA),
+      inpatient_beds_used_covid_7_day_avg = ifelse(inpatient_beds_used_covid_7_day_avg > -1, inpatient_beds_used_covid_7_day_avg, NA))
+  
+
+}
+
+# ggplot theme function
+my_map_theme <- function(){
+  theme(panel.background=element_blank(),
+        axis.text=element_blank(),
+        axis.ticks=element_blank(),
+        axis.title=element_blank())
+}
+
 ```
 
 
@@ -76,23 +117,45 @@ The variables we are using are:
 
 *Inpatient bed counts are used instead of total bed counts because many hospitals that only have inpatient bed data do not include data for inpatient and outpatient totals.*
 
+We also calculate: 
+* **bed_usage_ratio**: The ratio of hospital beds used out of 100 beds (inpatient)
+* **covid_bed_usage_ratio**: The ratio of hospital beds used by covid patients out of 100 beds (inpatient)
+* **covid_bed_usage_total_bed_usage_ratio**: The ratio of hospital beds used by covid patients out of all used beds (inpatient)
+
 ```{r}
 
-soda_dataframe <- get_soda_dataframe(
-  endpoint = hospital_data_soda_endpoint,
-  simple_filter = "state=WA",
-  where_filter = "collection_week='2023-02-24'",
-  select_filter = "state,hospital_name,city,inpatient_beds_7_day_avg,inpatient_beds_used_7_day_avg,inpatient_beds_used_covid_7_day_avg")
+# get data
+hospital_bed_data <- get_healthdata_gov_bed_utilization_from_soda(date = '2023-02-24')
 
-nrow(soda_dataframe)
+# calculate ratios
+hospital_bed_data <- hospital_bed_data %>% 
+  mutate(
+    bed_usage_ratio = inpatient_beds_used_7_day_avg / inpatient_beds_7_day_avg * 100,
+    covid_bed_usage_ratio = inpatient_beds_used_covid_7_day_avg / inpatient_beds_7_day_avg * 100,
+    covid_bed_usage_total_bed_usage_ratio = inpatient_beds_used_covid_7_day_avg / inpatient_beds_used_7_day_avg
+  )
+
+nrow(hospital_bed_data)
+
+```
+
+Get Map Geometry
+
+```{r}
+
+us_county_map_geometry <- counties_sf("laea") %>% 
+  mutate(fips_numeric = as.numeric(as.character(fips)))
+
+wa_counties_map_geometry <- us_county_map_geometry %>% 
+  filter(iso_3166_2 == "WA")
 
 
 ```
 
-
-
+```{r}
 
 ```
+
 
 ...
 
