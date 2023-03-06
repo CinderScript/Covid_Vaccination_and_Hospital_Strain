@@ -37,10 +37,14 @@ healthdata_soda_app_token <- "3tl81UiFuoaJ1DboeqMuy5K9U"
 # api url for arcgis hrr boundary shape data
 hrr_boundary_arcgis_endpoint = "https://services.arcgis.com/nzS0F0zdNLvs7nc8/arcgis/rest/services/HRR_boundaries/FeatureServer"
 
-#cashed data
-cashed_data_folder = "cashed-data"
-cashed_hrr_shapes_filepath = paste(cashed_data_folder, "hhr_shapes_arcgis_data.shape", sep = "/")
-cashed_hospital_bed_data_filepath = paste(cashed_data_folder, "hospital_bed_data/hospital_bed_utilization_healthdatagov", sep = "/")
+#cached data
+cached_data_folder_base = "cached-data"
+cached_bed_data_folder = paste(cached_data_folder_base, "hospital_bed_usage", sep = "/")
+cached_vaccination_data_folder = paste(cached_data_folder_base, "vaccination_rates", sep = "/")
+
+cached_hrr_shapes_filepath = paste(cached_data_folder_base, "hhr_shapes_arcgis_data.shape", sep = "/")
+cached_hospital_bed_data_filepath = paste(cached_bed_data_folder, "hospital_bed_usage_healthdatagov_", sep = "/")
+cached_vaccination_data_filepath = paste(cached_vaccination_data_folder, "vaccination_rates_cdc_", sep = "/")
 
 ```
 
@@ -59,6 +63,8 @@ get_soda_dataframe <- function(endpoint, simple_filter = NULL, where_filter, sel
              "&$select=", select_filter,
              "&$limit=", limit,
              "&$$app_token=", app_token)
+  
+  print(paste("Query: ", soda_query))
   
   # Getting response details in API
   response_details = GET(url = URLencode(soda_query))
@@ -84,13 +90,13 @@ get_soda_dataframe <- function(endpoint, simple_filter = NULL, where_filter, sel
 
 # gets dataframe with total inpatient beds, used inpatient beds, and used inpatient beds for covid patients, 
 # for each hospital on record for the week given (date). This request asks for the first 10,000 records. A typical
-# week on this dataset has between 3,000 and 4,000 records.
+# week on this dataset has between 3,000 and 6,000 records.
 get_bed_utilization_healthdata_gov_soda_api <- function(date){
   
   get_soda_dataframe(
     endpoint = hospital_data_soda_endpoint,
-  # simple_filter = "state='WA'",  # can add for smaller dataset for testing (fast soda api call)
-    where_filter = "collection_week=", date,
+    #simple_filter = "state='WA'",                              # can add this for smaller dataset for testing (fast soda api call)
+    where_filter = paste0("collection_week='",date, "'"),
     select_filter = "state,hospital_name,city,fips_code,inpatient_beds_7_day_avg,inpatient_beds_used_7_day_avg,inpatient_beds_used_covid_7_day_avg",
     limit = 10000,
     app_token = healthdata_soda_app_token) %>% 
@@ -111,33 +117,31 @@ get_bed_utilization_healthdata_gov_soda_api <- function(date){
       inpatient_beds_used_covid_7_day_avg = ifelse(inpatient_beds_used_covid_7_day_avg > -1, inpatient_beds_used_covid_7_day_avg, NA))
 }
 
-# Checks for data in the cashed data folder first, then looks for the data using the soda rest api
+# Checks for data in the cached data folder first, then looks for the data using the soda rest api
 get_bed_utilization_data <- function(date){
   
   #convert date to string soda api likes
   yyyy_mm_dd = ymd(date)
-
-  print(paste("Date Given: ", yyyy_mm_dd))
   
-  # first we need to determine the filename of the cashed data file.
-  filepath = paste0(cashed_hospital_bed_data_filepath, yyyy_mm_dd, ".csv")
+  # first we need to determine the filename of the cached data file.
+  filepath = paste0(cached_hospital_bed_data_filepath, yyyy_mm_dd, ".csv")
   
   if( !file.exists(filepath) ) {
     
     # get from healthdata.gov
     
-    print("Hospital bed cashed data was not found. Retrieving from healthdata.gov (soda api)...")
-    bed_data = get_bed_utilization_healthdata_gov_soda_api(yyyy_mm_dd)
+    print("Hospital bed cached data was not found. Retrieving from healthdata.gov (soda api)...")
+    bed_data = get_bed_utilization_healthdata_gov_soda_api(date = yyyy_mm_dd)
     
     write_csv(bed_data, filepath)
-    print("File retrieved and cashed for future use.")
+    print("File retrieved and cached for future use.")
   }
   else {
     
-    # get from cashed data file
+    # get from cached data file
     
-    bed_data = read_csv(filepath)
-    print("Locally cashed hospital bed data found and loaded.")
+    bed_data = read_csv(filepath, show_col_types = FALSE)
+    print("Hospital bed data loaded from local cache.")
   }
   
   return(bed_data)
@@ -149,9 +153,9 @@ get_bed_utilization_data <- function(date){
 # get hrr shapefile data from arcgis
 get_hrr_shapes_arcgis_featureserver_api <- function() {
   
-  if( !file.exists(cashed_hrr_shapes_filepath) ) {
+  if( !file.exists(cached_hrr_shapes_filepath) ) {
   
-    print("No cashed hrr shapefile was found. Downloading from arcgis and saving to file...")
+    print("No cached hrr shapefile was found. Downloading from arcgis and saving to file...")
     
     # get and save the file
     url = parse_url(hrr_boundary_arcgis_endpoint)
@@ -164,11 +168,11 @@ get_hrr_shapes_arcgis_featureserver_api <- function() {
     
     hrr_shape_data = st_read(request)
     
-    st_write(hrr_shape_data, cashed_hrr_shapes_filepath, driver = "GeoJSON")
+    st_write(hrr_shape_data, cached_hrr_shapes_filepath, driver = "GeoJSON")
   }
   else {
-    hrr_shape_data = st_read(cashed_hrr_shapes_filepath)
-    print("Cashed hrr shapes file was found and loaded.")
+    hrr_shape_data = st_read(cached_hrr_shapes_filepath)
+    print("HRR shapes data loaded from local cache.")
   }
   
   return(hrr_shape_data)
@@ -176,12 +180,14 @@ get_hrr_shapes_arcgis_featureserver_api <- function() {
 
 
 create_data_folder_if_dne <- function(){
-  if ( !dir.exists(file.path(cashed_data_folder)) ) {
-    print("Creating cashed data folder...")
-    dir.create(cashed_data_folder)
+  if ( !dir.exists(file.path(cached_data_folder_base)) ) {
+    print("Creating cached data folder...")
+    dir.create(cached_data_folder_base)
+    dir.create(cached_bed_data_folder)
+    dir.create(cached_vaccination_data_folder)
   }
   else
-    print("Founds cashed data folder.")
+    print("Founds cached data folder.")
 }
 
 # ggplot theme function
@@ -196,12 +202,16 @@ my_map_theme <- function(){
 
 # Get Required Datasets
 
-Datasets are first looked for in the cashed data folder, then downloaded if not found.
+Datasets are first looked for in the cached data folder, then downloaded if not found.
+
+ "Query:  https://healthdata.gov/resource/anag-cw7u.json?&$where=collection_week='2023-02-24'&$select=state,hospital_name,city,fips_code,inpatient_beds_7_day_avg,inpatient_beds_used_7_day_avg,inpatient_beds_used_covid_7_day_avg&$limit=10000&$$app_token=3tl81UiFuoaJ1DboeqMuy5K9U"
+ 
+"Query:  https://healthdata.gov/resource/anag-cw7u.json?state='WA'&$where=collection_week=2021-09-24&$select=state,hospital_name,city,fips_code,inpatient_beds_7_day_avg,inpatient_beds_used_7_day_avg,inpatient_beds_used_covid_7_day_avg&$limit=10000&$$app_token=3tl81UiFuoaJ1DboeqMuy5K9U"
 
 ```{r}
 create_data_folder_if_dne()
 
-#hrr_data <- get_hrr_shapes_arcgis_featureserver_api()
+hrr_data <- get_hrr_shapes_arcgis_featureserver_api()
 
 bed_data <- get_bed_utilization_data(date = '2021/09/24')
 ```
