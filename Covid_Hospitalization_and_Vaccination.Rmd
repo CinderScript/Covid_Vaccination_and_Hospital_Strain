@@ -64,8 +64,6 @@ get_soda_dataframe <- function(endpoint, simple_filter = NULL, where_filter, sel
              "&$limit=", limit,
              "&$$app_token=", app_token)
   
-  print(paste("Query: ", soda_query))
-  
   # Getting response details in API
   response_details = GET(url = URLencode(soda_query))
   
