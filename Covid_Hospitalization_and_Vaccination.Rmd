@@ -14,6 +14,7 @@ library(openintro)
 
 library(tidyverse)
 library(lubridate)
+library(sf)
 
 # for map data
 library(albersusa)
@@ -64,6 +65,8 @@ get_soda_dataframe <- function(endpoint, simple_filter = NULL, where_filter, sel
              "&$select=", select_filter,
              "&$limit=", limit,
              "&$$app_token=", soda_app_key)
+  
+  print(paste("Query: ", soda_query))
   
   # Getting response details in API
   response_details = GET(url = URLencode(soda_query))
@@ -139,18 +142,18 @@ get_bed_utilization_healthdata_gov_soda_api <- function(date){
 #               inpatient_beds_used_covid_7_day_avg
 get_bed_utilization_data <- function(date){
   
-  #convert date to string soda api likes
-  yyyy_mm_dd = ymd(date)
+  # this database likes this format
+  date <- ymd(date)
   
   # first we need to determine the filename of the cached data file.
-  filepath = paste0(cached_hospital_bed_data_filepath, yyyy_mm_dd, ".csv")
+  filepath = paste0(cached_hospital_bed_data_filepath, date, ".csv")
   
   if( !file.exists(filepath) ) {
     
     # get from healthdata.gov
     
     print("Hospital bed cached data was not found. Retrieving from healthdata.gov (soda api)...")
-    bed_data = get_bed_utilization_healthdata_gov_soda_api(date = yyyy_mm_dd)
+    bed_data = get_bed_utilization_healthdata_gov_soda_api(date = date)
     
     write_csv(bed_data, filepath)
     print("File retrieved and cached for future use.")
@@ -170,6 +173,9 @@ get_bed_utilization_data <- function(date){
 ######### VACCINATION DATA #########
 
 # gets dataframe with vaccination records from the CDC using the soda api
+# converts the column's data types to those loaded by read_csv by default 
+# so that data returned from the soda endpoint is the same as the data loaded 
+# from the cache file.
 #
 # columns selected from dataset: 
 #               fips
@@ -178,12 +184,31 @@ get_bed_utilization_data <- function(date){
 #               booster_doses_vax_pct
 get_vaccination_rates_cdc_soda_api <- function(date){
   
-  get_soda_dataframe(
+  data = get_soda_dataframe(
     endpoint = vaccination_data_soda_endpoint,
 #    simple_filter = "recip_state='WA'",                              # can add this for smaller dataset for testing (fast soda api call)
     where_filter = paste0("date='",date, "'"),
-    select_filter = "fips,series_complete_pop_pct,administered_dose1_pop_pct,booster_doses_vax_pct",
+    select_filter = "date,fips,series_complete_pop_pct,administered_dose1_pop_pct,booster_doses_vax_pct",
     limit = 10000)
+  
+## Data needs to be converted so it is consistent. We want it to load from the csv 
+## the same way it is retrieved from the soda endpoint
+  
+  data <- data %>% mutate(
+    date = as_date(date),
+    fips = as.numeric(fips))
+  
+    
+  if("series_complete_pop_pct" %in% colnames(data))
+    data <- data %>% mutate (series_complete_pop_pct = as.numeric(series_complete_pop_pct))
+
+  if("administered_dose1_pop_pct" %in% colnames(data))
+    data <- data %>% mutate (administered_dose1_pop_pct = as.numeric(administered_dose1_pop_pct))
+  
+  if("booster_doses_vax_pct" %in% colnames(data))
+    data <- data %>% mutate (booster_doses_vax_pct = as.numeric(booster_doses_vax_pct))
+
+  return(data)
 }
 
 
@@ -199,28 +224,26 @@ get_vaccination_rates_cdc_soda_api <- function(date){
 #               booster_doses_vax_pct
 get_vaccination_rates_data <- function(date){
   
-  #convert date to string soda api likes
-  yyyy_mm_dd = ymd(date)
+  # ymd is how arguments should be entered and files should be saved
+  date <- ymd(date)
   
   # first we need to determine the path/name of the cached data file.
-  filepath = paste0(cached_vaccination_data_filepath, yyyy_mm_dd, ".csv")
+  filepath = paste0(cached_vaccination_data_filepath, date, ".csv")
   
   if( !file.exists(filepath) ) {
-    
-    # get from healthdata.gov
+    # get from CDC
     
     print("Vaccination Rates cached data was not found. Retrieving from data.cdc.gov (soda api)...")
-    data = get_vaccination_rates_cdc_soda_api(date = yyyy_mm_dd)
+    data = get_vaccination_rates_cdc_soda_api(date = date)
     
     write_csv(data, filepath)
     print("Vaccination records file retrieved and cached for future use.")
   }
   else {
-    
     # get from cached data file
     
     data = read_csv(filepath, show_col_types = FALSE)
-    print("Hospital bed data loaded from local cache.")
+    print("Vaccination records loaded from local cache.")
   }
   
   return(data)
@@ -280,36 +303,82 @@ my_map_theme <- function(){
 
 ```
 
-# Get Required Datasets
+
+
+# Data Sources
+
+Anytime a new file is downloaded, that file is cached in the "cached-data" folder. Anytime a request is made 
+for a dataset by date, this folder is checked first.
+
+## Vaccination Rates Data per US County
+
+Vaccination rates are obtained from the CDC: https://data.cdc.gov/Vaccinations/COVID-19-Vaccinations-in-the-United-States-County/8xkx-amqh
+This dataset is large, so instead of downloading the whole dataset, this application accesses it through the SODA API and retrieves only the 
+relevant rows and columns.
+
+The "COVID-19 Vaccinations in the United States,County" data provides counts and percentages of people who have been 
+vaccinated in each county of the United States.
+
+#               fips
+#               series_complete_pop_pct
+#               administered_dose1_pop_pct
+#               booster_doses_vax_pct
+
+The variables retrieved are:
+* **fips**
+* **series_complete_pop_pct**: "Percent of people who have completed a primary series (have second dose of a two-dose vaccine or one dose of a single-dose vaccine) based on the jurisdiction and county where vaccine recipient lives."
+* **administered_dose1_pop_pct**: "Percent of Total Pop with at least one Dose by State of Residence"
+* **booster_doses_vax_pct**: "Percent of people who completed a primary series and have received a booster (or additional) dose."
+
+## Hospital Capacity Data for USA per Hospital
+
+Hospital bed usage counts is obtained from HealthData.gov: https://healthdata.gov/Hospital/COVID-19-Reported-Patient-Impact-and-Hospital-Capa/anag-cw7u. 
+This dataset is large, so instead of downloading the whole dataset, this application accesses it through the SODA API and retrieves only the 
+relevant rows and columns.
+
+The "COVID-19 Reported Patient Impact and Hospital Capacity by Facility" data provides counts on hospital bed utilization that is aggregated weekly.
+
+The variables retrieved are:
+* **Hospital_name** and **fips_code**
+* **inpatient_beds_7_day_avg**: "Average number of total number of staffed inpatient beds in your hospital including all overflow, observation, and active surge/expansion beds used for inpatients (including all ICU beds) reported in the 7-day period."
+* **inpatient_beds_used_7_day_avg**: "Average of total number of staffed inpatient beds that are occupied reported during the 7-day period."
+* **inpatient_beds_used_covid_7_day_avg**: "Average of reported patients currently hospitalized in an inpatient bed who have suspected or confirmed COVID-19 reported during the 7-day period."
+
+*Inpatient bed counts are used instead of total bed counts because many hospitals that only have inpatient bed data do not include data for inpatient and outpatient totals.*
+
+
+```{r}
+
+```
+
+
+test <- read.csv("cached-data/COVID-19_Vaccinations_in_the_United_States_County.csv")
+
+by_day <- test %>% 
+  filter(Date == "09/24/2021")
+
+Query:  https://data.cdc.gov/resource/8xkx-amqh.json?&$where=date='2021-09-24'&$select=fips,series_complete_pop_pct,administered_dose1_pop_pct,booster_doses_vax_pct&$limit=10000&$$app_token=3tl81UiFuoaJ1DboeqMuy5K9U
+
+Query:  https://data.cdc.gov/resource/8xkx-amqh.json?&$where=date='09/24/2021'&$select=date,fips,series_complete_pop_pct,administered_dose1_pop_pct,booster_doses_vax_pct&$limit=10000&$$app_token=3tl81UiFuoaJ1DboeqMuy5K9U
 
 
 ```{r}
 create_data_folder_if_dne()
 
+### Get data that will be studied
+hospital_bed_data <- get_bed_utilization_data(date = '2021/09/24')
+
+vaccination_data <- get_vaccination_rates_data(date = '2021/09/24')
+vaccination_data_json <- get_vaccination_rates_data(date = '2021/09/24')
+
+### Get geometry for mapping
 hrr_shape_data <- get_hrr_shapes_arcgis_featureserver_api()
 
-bed_data <- get_bed_utilization_data(date = '2021/09/24')
-
-vaccination_rates <- get_vaccination_rates_data(date = '2021-09-24')
+us_county_shape_data <- counties_sf("laea") %>% 
+  mutate(fips = as.numeric(as.character(fips)))
 ```
 
-
-
-# Data Sources
-
-## Hospital Capacity Data
-
-Hospital bed usage counts is obtained from HealthData.gov: https://healthdata.gov/Hospital/COVID-19-Reported-Patient-Impact-and-Hospital-Capa/anag-cw7u. This dataset is over 300 MB, so instead of downloading the whole dataset, this application accesses it through the SODA API.
-
-The "COVID-19 Reported Patient Impact and Hospital Capacity by Facility" provides data on hospital bed utilization that is aggregated weekly.
-
-The variables we are using are:
-* **Hospital_name** and **fips_code**
-* **inpatient_beds_7_day_avg**: Average number of total number of staffed inpatient beds in your hospital including all overflow, observation, and active surge/expansion beds used for inpatients (including all ICU beds) reported in the 7-day period.
-* **inpatient_beds_used_7_day_avg**: Average of total number of staffed inpatient beds that are occupied reported during the 7-day period.
-* **inpatient_beds_used_covid_7_day_avg**: Average of reported patients currently hospitalized in an inpatient bed who have suspected or confirmed COVID-19 reported during the 7-day period.
-
-*Inpatient bed counts are used instead of total bed counts because many hospitals that only have inpatient bed data do not include data for inpatient and outpatient totals.*
+## Calculate ratios for hospital bed usage
 
 We also calculate: 
 * **bed_usage_ratio**: The ratio of hospital beds used out of 100 beds (inpatient)
@@ -317,9 +386,6 @@ We also calculate:
 * **covid_bed_usage_total_bed_usage_ratio**: The ratio of hospital beds used by covid patients out of all used beds (inpatient)
 
 ```{r}
-
-# get data
-hospital_bed_data <- get_healthdata_gov_bed_utilization_from_soda(date = '2021/09/24')
 
 # calculate ratios
 hospital_bed_data <- hospital_bed_data %>% 
@@ -332,23 +398,31 @@ hospital_bed_data <- hospital_bed_data %>%
 ```
 
 
-## Map Geometry Data
-
-county and state map geometry
+# Map Vaccination Rates
 
 ```{r}
 
-us_county_map_geometry <- counties_sf("laea") %>% 
-  mutate(fips = as.numeric(as.character(fips)))
+map_data_vaccination_rate <- us_county_shape_data %>% 
+  left_join(vaccination_data, by = "fips")
 
-wa_counties_map_geometry <- counties_sf() %>% 
-  mutate(fips = as.numeric(as.character(fips))) %>% 
-  filter(iso_3166_2 == "WA")
+map_data_vaccination_rate %>% 
+  ggplot() +
+  geom_sf(aes(fill = series_complete_pop_pct)) +
+  scale_fill_continuous(low="yellow", high="red", labels = scales::percent,
+  breaks=c(20,80)) +
+  my_map_theme()
+
+map_data_vaccination_rate %>% 
+  filter(iso_3166_2 == "TX") %>% 
+  summarise(series_complete_pop_pct, administered_dose1_pop_pct) %>% 
+  arrange(desc(series_complete_pop_pct))
 
 
 ```
 
-Hospitals are grouped by county using their fips code and then averages for bed ratios are calculated for each county.
+
+
+## Map Hospital Bed Usage
 
 ```{r}
 county_bed_ratios <- hospital_bed_data %>% 

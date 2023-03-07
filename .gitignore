@@ -1,6 +1,8 @@
 cached-data/
 hrr/
 
+debug.Rmd
+
 # History files
 .Rhistory
 .Rapp.history
