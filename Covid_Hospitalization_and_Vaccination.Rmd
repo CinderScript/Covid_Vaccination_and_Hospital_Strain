@@ -195,10 +195,11 @@ get_vaccination_rates_cdc_soda_api <- function(date){
 ## the same way it is retrieved from the soda endpoint
   
   data <- data %>% mutate(
-    date = as_date(date),
-    fips = as.numeric(fips))
+    date = as_date(date))
+
+  if("fips" %in% colnames(data))
+    data <- data %>% mutate (fips = as.numeric(fips))
   
-    
   if("series_complete_pop_pct" %in% colnames(data))
     data <- data %>% mutate (series_complete_pop_pct = as.numeric(series_complete_pop_pct))
 
@@ -368,7 +369,7 @@ create_data_folder_if_dne()
 ### Get data that will be studied
 hospital_bed_data <- get_bed_utilization_data(date = '2021/09/24')
 
-vaccination_data <- get_vaccination_rates_data(date = '2021/09/24')
+vaccination_data <- get_vaccination_rates_data(date = '2022/09/22')
 vaccination_data_json <- get_vaccination_rates_data(date = '2021/09/24')
 
 ### Get geometry for mapping
