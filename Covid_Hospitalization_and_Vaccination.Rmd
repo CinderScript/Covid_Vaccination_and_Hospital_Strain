@@ -28,11 +28,12 @@ Global Vars:
  
 ```{r}
 
-# hospital data endpoint to soda api
+# hospital and vaccination data endpoints to soda api
 hospital_data_soda_endpoint <- "https://healthdata.gov/resource/anag-cw7u.json"
+vaccination_data_soda_endpoint <- "https://data.cdc.gov/resource/8xkx-amqh.json"
 
 # needed to avoid api throttling
-healthdata_soda_app_token <- "3tl81UiFuoaJ1DboeqMuy5K9U"
+soda_app_key <- "3tl81UiFuoaJ1DboeqMuy5K9U"
 
 # api url for arcgis hrr boundary shape data
 hrr_boundary_arcgis_endpoint = "https://services.arcgis.com/nzS0F0zdNLvs7nc8/arcgis/rest/services/HRR_boundaries/FeatureServer"
@@ -53,7 +54,7 @@ cached_vaccination_data_filepath = paste(cached_vaccination_data_folder, "vaccin
 
 ```{r}
 # Returns a dataframe from the given soda api endpoint. 
-get_soda_dataframe <- function(endpoint, simple_filter = NULL, where_filter, select_filter, limit = 1000, app_token){
+get_soda_dataframe <- function(endpoint, simple_filter = NULL, where_filter, select_filter, limit = 1000){
   
   #Build the query
   soda_query = paste0(endpoint, 
@@ -62,7 +63,7 @@ get_soda_dataframe <- function(endpoint, simple_filter = NULL, where_filter, sel
              "&$where=", where_filter,
              "&$select=", select_filter,
              "&$limit=", limit,
-             "&$$app_token=", app_token)
+             "&$$app_token=", soda_app_key)
   
   # Getting response details in API
   response_details = GET(url = URLencode(soda_query))
@@ -84,11 +85,20 @@ get_soda_dataframe <- function(endpoint, simple_filter = NULL, where_filter, sel
   soda_dataframe = as.data.frame(response_content_json)
 }
 
-### HOSPITAL BED DATA ###
+######### HOSPITAL BED DATA#########
 
 # gets dataframe with total inpatient beds, used inpatient beds, and used inpatient beds for covid patients, 
 # for each hospital on record for the week given (date). This request asks for the first 10,000 records. A typical
 # week on this dataset has between 3,000 and 6,000 records.
+#
+# columns selected from dataset: 
+#               state
+#               hospital_name
+#               city
+#               fips_code
+#               inpatient_beds_7_day_avg
+#               inpatient_beds_used_7_day_avg
+#               inpatient_beds_used_covid_7_day_avg
 get_bed_utilization_healthdata_gov_soda_api <- function(date){
   
   get_soda_dataframe(
@@ -96,8 +106,7 @@ get_bed_utilization_healthdata_gov_soda_api <- function(date){
     #simple_filter = "state='WA'",                              # can add this for smaller dataset for testing (fast soda api call)
     where_filter = paste0("collection_week='",date, "'"),
     select_filter = "state,hospital_name,city,fips_code,inpatient_beds_7_day_avg,inpatient_beds_used_7_day_avg,inpatient_beds_used_covid_7_day_avg",
-    limit = 10000,
-    app_token = healthdata_soda_app_token) %>% 
+    limit = 10000) %>% 
     
     # Converting value types #
     
@@ -115,7 +124,19 @@ get_bed_utilization_healthdata_gov_soda_api <- function(date){
       inpatient_beds_used_covid_7_day_avg = ifelse(inpatient_beds_used_covid_7_day_avg > -1, inpatient_beds_used_covid_7_day_avg, NA))
 }
 
-# Checks for data in the cached data folder first, then looks for the data using the soda rest api
+# Gets hospital bed usage dataframe.
+# Checks for data in the cached data folder first, then looks for the data 
+# using the soda rest api. If no data file is found locally, the downloaded 
+# file is saved in the cached data folder.
+#
+# columns in dataset: 
+#               state
+#               hospital_name
+#               city
+#               fips_code
+#               inpatient_beds_7_day_avg
+#               inpatient_beds_used_7_day_avg
+#               inpatient_beds_used_covid_7_day_avg
 get_bed_utilization_data <- function(date){
   
   #convert date to string soda api likes
@@ -143,6 +164,66 @@ get_bed_utilization_data <- function(date){
   }
   
   return(bed_data)
+}
+
+
+######### VACCINATION DATA #########
+
+# gets dataframe with vaccination records from the CDC using the soda api
+#
+# columns selected from dataset: 
+#               fips
+#               series_complete_pop_pct
+#               administered_dose1_pop_pct
+#               booster_doses_vax_pct
+get_vaccination_rates_cdc_soda_api <- function(date){
+  
+  get_soda_dataframe(
+    endpoint = vaccination_data_soda_endpoint,
+#    simple_filter = "recip_state='WA'",                              # can add this for smaller dataset for testing (fast soda api call)
+    where_filter = paste0("date='",date, "'"),
+    select_filter = "fips,series_complete_pop_pct,administered_dose1_pop_pct,booster_doses_vax_pct",
+    limit = 10000)
+}
+
+
+# gets dataframe with vaccination records.
+# first checks for a locally cached data file
+# If no data file is found locally, the downloaded file
+# is saved in the cached data folder.
+#
+# columns selected from dataset: 
+#               fips
+#               series_complete_pop_pct
+#               administered_dose1_pop_pct
+#               booster_doses_vax_pct
+get_vaccination_rates_data <- function(date){
+  
+  #convert date to string soda api likes
+  yyyy_mm_dd = ymd(date)
+  
+  # first we need to determine the path/name of the cached data file.
+  filepath = paste0(cached_vaccination_data_filepath, yyyy_mm_dd, ".csv")
+  
+  if( !file.exists(filepath) ) {
+    
+    # get from healthdata.gov
+    
+    print("Vaccination Rates cached data was not found. Retrieving from data.cdc.gov (soda api)...")
+    data = get_vaccination_rates_cdc_soda_api(date = yyyy_mm_dd)
+    
+    write_csv(data, filepath)
+    print("Vaccination records file retrieved and cached for future use.")
+  }
+  else {
+    
+    # get from cached data file
+    
+    data = read_csv(filepath, show_col_types = FALSE)
+    print("Hospital bed data loaded from local cache.")
+  }
+  
+  return(data)
 }
 
 
@@ -176,6 +257,7 @@ get_hrr_shapes_arcgis_featureserver_api <- function() {
   return(hrr_shape_data)
 }
 
+### misc ###
 
 create_data_folder_if_dne <- function(){
   if ( !dir.exists(file.path(cached_data_folder_base)) ) {
@@ -200,19 +282,17 @@ my_map_theme <- function(){
 
 # Get Required Datasets
 
-Datasets are first looked for in the cached data folder, then downloaded if not found.
-
- "Query:  https://healthdata.gov/resource/anag-cw7u.json?&$where=collection_week='2023-02-24'&$select=state,hospital_name,city,fips_code,inpatient_beds_7_day_avg,inpatient_beds_used_7_day_avg,inpatient_beds_used_covid_7_day_avg&$limit=10000&$$app_token=3tl81UiFuoaJ1DboeqMuy5K9U"
- 
-"Query:  https://healthdata.gov/resource/anag-cw7u.json?state='WA'&$where=collection_week=2021-09-24&$select=state,hospital_name,city,fips_code,inpatient_beds_7_day_avg,inpatient_beds_used_7_day_avg,inpatient_beds_used_covid_7_day_avg&$limit=10000&$$app_token=3tl81UiFuoaJ1DboeqMuy5K9U"
 
 ```{r}
 create_data_folder_if_dne()
 
-hrr_data <- get_hrr_shapes_arcgis_featureserver_api()
+hrr_shape_data <- get_hrr_shapes_arcgis_featureserver_api()
 
 bed_data <- get_bed_utilization_data(date = '2021/09/24')
+
+vaccination_rates <- get_vaccination_rates_data(date = '2021-09-24')
 ```
+
 
 
 # Data Sources
