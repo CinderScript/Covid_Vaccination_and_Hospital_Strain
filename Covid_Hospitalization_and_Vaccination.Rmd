@@ -92,7 +92,7 @@ get_soda_dataframe <- function(endpoint, simple_filter = NULL, where_filter, sel
 
 # gets dataframe with total inpatient beds, used inpatient beds, and used inpatient beds for covid patients, 
 # for each hospital on record for the week given (date). This request asks for the first 10,000 records. A typical
-# week on this dataset has between 3,000 and 6,000 records.
+# week on this dataset has between 4,000 and 5,000 records.
 #
 # columns selected from dataset: 
 #               state
@@ -109,7 +109,7 @@ get_bed_utilization_healthdata_gov_soda_api <- function(date){
     #simple_filter = "state='WA'",                              # can add this for smaller dataset for testing (fast soda api call)
     where_filter = paste0("collection_week='",date, "'"),
     select_filter = "state,hospital_name,city,fips_code,inpatient_beds_7_day_avg,inpatient_beds_used_7_day_avg,inpatient_beds_used_covid_7_day_avg",
-    limit = 10000) %>% 
+    limit = 7000) %>% 
     
     # Converting value types #
     
@@ -177,6 +177,8 @@ get_bed_utilization_data <- function(date){
 # so that data returned from the soda endpoint is the same as the data loaded 
 # from the cache file.
 #
+# There are around 3300 records per date in this dataset.
+#
 # columns selected from dataset: 
 #               fips
 #               series_complete_pop_pct
@@ -188,7 +190,7 @@ get_vaccination_rates_cdc_soda_api <- function(date){
     endpoint = vaccination_data_soda_endpoint,
 #    simple_filter = "recip_state='WA'",                              # can add this for smaller dataset for testing (fast soda api call)
     where_filter = paste0("date='",date, "'"),
-    select_filter = "date,fips,series_complete_pop_pct,administered_dose1_pop_pct,booster_doses_vax_pct",
+    select_filter = "date,fips,series_complete_pop_pct,administered_dose1_pop_pct,booster_doses_vax_pct,completeness_pct,census2019",
     limit = 10000)
   
 ## Data needs to be converted so it is consistent. We want it to load from the csv 
@@ -349,28 +351,12 @@ The variables retrieved are:
 
 
 ```{r}
-
-```
-
-
-test <- read.csv("cached-data/COVID-19_Vaccinations_in_the_United_States_County.csv")
-
-by_day <- test %>% 
-  filter(Date == "09/24/2021")
-
-Query:  https://data.cdc.gov/resource/8xkx-amqh.json?&$where=date='2021-09-24'&$select=fips,series_complete_pop_pct,administered_dose1_pop_pct,booster_doses_vax_pct&$limit=10000&$$app_token=3tl81UiFuoaJ1DboeqMuy5K9U
-
-Query:  https://data.cdc.gov/resource/8xkx-amqh.json?&$where=date='09/24/2021'&$select=date,fips,series_complete_pop_pct,administered_dose1_pop_pct,booster_doses_vax_pct&$limit=10000&$$app_token=3tl81UiFuoaJ1DboeqMuy5K9U
-
-
-```{r}
 create_data_folder_if_dne()
 
 ### Get data that will be studied
 hospital_bed_data <- get_bed_utilization_data(date = '2021/09/24')
 
-vaccination_data <- get_vaccination_rates_data(date = '2022/09/22')
-vaccination_data_json <- get_vaccination_rates_data(date = '2021/09/24')
+vaccination_data <- get_vaccination_rates_data(date = '2022/06/29')
 
 ### Get geometry for mapping
 hrr_shape_data <- get_hrr_shapes_arcgis_featureserver_api()
@@ -401,22 +387,35 @@ hospital_bed_data <- hospital_bed_data %>%
 
 # Map Vaccination Rates
 
+### By Date Function
+
 ```{r}
 
-map_data_vaccination_rate <- us_county_shape_data %>% 
-  left_join(vaccination_data, by = "fips")
+### Date must be given in yyyymmdd format
+Graph_Vaccination_Rates_By_County <- function(date) {
+  vaccination_data = get_vaccination_rates_data(date = date)
+  
+  vaccination_data = us_county_shape_data %>% 
+    left_join(vaccination_data, by = "fips") 
+    
+  vaccination_data %>% 
+    ggplot() +
+    geom_sf(aes(fill = series_complete_pop_pct/100)) +
+    scale_fill_continuous("Fully Vaccinated", low="yellow", high="red", labels = scales::percent) +
+    ggtitle("COVID Vaccination Status", subtitle = "Percentage of county population that is fully vaccinated (from CDC)") +
+    my_map_theme()
+}
 
-map_data_vaccination_rate %>% 
-  ggplot() +
-  geom_sf(aes(fill = series_complete_pop_pct)) +
-  scale_fill_continuous(low="yellow", high="red", labels = scales::percent,
-  breaks=c(20,80)) +
-  my_map_theme()
+```
 
-map_data_vaccination_rate %>% 
-  filter(iso_3166_2 == "TX") %>% 
-  summarise(series_complete_pop_pct, administered_dose1_pop_pct) %>% 
-  arrange(desc(series_complete_pop_pct))
+
+
+```{r}
+
+
+Graph_Vaccination_Rates_By_County("2021/03/1")
+
+Graph_Vaccination_Rates_By_County("2021/09/24")
 
 
 ```
