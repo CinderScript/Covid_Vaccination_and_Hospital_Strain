@@ -253,7 +253,7 @@ get_vaccination_rates_data <- function(date){
 }
 
 
-### HRR BOUNDARY MAP DATA ###
+######### HRR BOUNDARY MAP DATA ######### 
 
 # get hrr shapefile data from arcgis
 get_hrr_shapes_arcgis_featureserver_api <- function() {
@@ -308,26 +308,31 @@ my_map_theme <- function(){
 
 
 
-# Data Sources
+# Data Sources Explained
+
+## TL/DR
+
+Data sources:
+
+1. Hospital Bed Usage in USA - per hospital
+2. Vaccination Rates in USA - per county
+3. HRR Geography in USA - per HRR number
+4. County Geography in USA - per county
 
 Anytime a new file is downloaded, that file is cached in the "cached-data" folder. Anytime a request is made 
 for a dataset by date, this folder is checked first.
 
 ## Vaccination Rates Data per US County
 
-Vaccination rates are obtained from the CDC: https://data.cdc.gov/Vaccinations/COVID-19-Vaccinations-in-the-United-States-County/8xkx-amqh
+Vaccination rates are obtained from the CDC: https://data.cdc.gov/Vaccinations/COVID-19-Vaccinations-in-the-United-States-County/8xkx-amqh. 
 This dataset is large, so instead of downloading the whole dataset, this application accesses it through the SODA API and retrieves only the 
 relevant rows and columns.
 
 The "COVID-19 Vaccinations in the United States,County" data provides counts and percentages of people who have been 
 vaccinated in each county of the United States.
 
-#               fips
-#               series_complete_pop_pct
-#               administered_dose1_pop_pct
-#               booster_doses_vax_pct
-
 The variables retrieved are:
+
 * **fips**
 * **series_complete_pop_pct**: "Percent of people who have completed a primary series (have second dose of a two-dose vaccine or one dose of a single-dose vaccine) based on the jurisdiction and county where vaccine recipient lives."
 * **administered_dose1_pop_pct**: "Percent of Total Pop with at least one Dose by State of Residence"
@@ -342,6 +347,7 @@ relevant rows and columns.
 The "COVID-19 Reported Patient Impact and Hospital Capacity by Facility" data provides counts on hospital bed utilization that is aggregated weekly.
 
 The variables retrieved are:
+
 * **Hospital_name** and **fips_code**
 * **inpatient_beds_7_day_avg**: "Average number of total number of staffed inpatient beds in your hospital including all overflow, observation, and active surge/expansion beds used for inpatients (including all ICU beds) reported in the 7-day period."
 * **inpatient_beds_used_7_day_avg**: "Average of total number of staffed inpatient beds that are occupied reported during the 7-day period."
@@ -350,44 +356,64 @@ The variables retrieved are:
 *Inpatient bed counts are used instead of total bed counts because many hospitals that only have inpatient bed data do not include data for inpatient and outpatient totals.*
 
 
-```{r}
-create_data_folder_if_dne()
-
-### Get data that will be studied
-hospital_bed_data <- get_bed_utilization_data(date = '2021/09/24')
-
-vaccination_data <- get_vaccination_rates_data(date = '2022/06/29')
-
-### Get geometry for mapping
-hrr_shape_data <- get_hrr_shapes_arcgis_featureserver_api()
-
-us_county_shape_data <- counties_sf("laea") %>% 
-  mutate(fips = as.numeric(as.character(fips)))
-```
-
-## Calculate ratios for hospital bed usage
+#### Calculate ratios for hospital bed usage
 
 We also calculate: 
+
 * **bed_usage_ratio**: The ratio of hospital beds used out of 100 beds (inpatient)
 * **covid_bed_usage_ratio**: The ratio of hospital beds used by covid patients out of 100 beds (inpatient)
 * **covid_bed_usage_total_bed_usage_ratio**: The ratio of hospital beds used by covid patients out of all used beds (inpatient)
 
+#### Calculate average ratios per region
+
+The hospital bed dataset contains records for each hospital. For mapping, each map region will need to represent the average 
+of all hospitals present in that region.
+
+
+## Geographic Shape Data
+
+### US County Shape Data
+
+County shape data is obtained from the Albersusa package.
+
+Load county data using the Alber's projection:
+
 ```{r}
-
-# calculate ratios
-hospital_bed_data <- hospital_bed_data %>% 
-  mutate(
-    bed_usage_ratio = inpatient_beds_used_7_day_avg / inpatient_beds_7_day_avg * 100,
-    covid_bed_usage_ratio = inpatient_beds_used_covid_7_day_avg / inpatient_beds_7_day_avg * 100,
-    covid_bed_usage_total_bed_usage_ratio = inpatient_beds_used_covid_7_day_avg / inpatient_beds_used_7_day_avg
-  )
-
+# get county shapes for mapping
+us_county_shape_data <- counties_sf("laea") %>% 
+  mutate(fips = as.numeric(as.character(fips)))
 ```
 
 
-# Map Vaccination Rates
+### Hospital Referral Region Shape Data
 
-### By Date Function
+Shape data for USA HRR regions are downloaded from arcgis.com using their "FeatureServer" REST api.
+
+https://www.arcgis.com/home/item.html?id=46bf6790c4e0455e9379ee9769b1a5ab
+
+
+```{r}
+# Get hrr shapes for mapping
+hrr_shape_data <- get_hrr_shapes_arcgis_featureserver_api()
+```
+## Local Data Caching
+
+Vaccination data, bed data, hrr boundary data, and ZIP Code HRR Crosswalks are obtained by downloaded 
+from the internet. Only the needed portions of the datasets are requested from the corresponding endpoints. 
+Before downloading, this application first checks if the dataset has already been downloaded in a local cache 
+file. Whenever a new portion of a dataset is downloaded, it is saved to the cache folder local to the application 
+folder.
+
+Setup the data caching folder:
+
+```{r}
+create_data_folder_if_dne()
+```
+
+
+# GGPLOT Maps
+
+### Graph by Date Functions
 
 ```{r}
 
@@ -408,7 +434,7 @@ Graph_Vaccination_Rates_By_County <- function(date) {
 
 ```
 
-
+### Vaccination Rates Map
 
 ```{r}
 
@@ -422,51 +448,61 @@ Graph_Vaccination_Rates_By_County("2021/09/24")
 
 
 
-## Map Hospital Bed Usage
+## Hospital Bed Usage Map
+
 
 ```{r}
-county_bed_ratios <- hospital_bed_data %>% 
-  group_by(fips_code) %>% 
-  summarise(
-    bed_usage_ratio = mean(bed_usage_ratio, na.rm = TRUE), 
-    covid_bed_usage_ratio = mean(covid_bed_usage_ratio, na.rm = TRUE), 
-    covid_bed_usage_total_bed_usage_ratio = mean(covid_bed_usage_total_bed_usage_ratio, na.rm = TRUE))
+temp <- read_csv("cached-data/COVID-19_Reported_Patient_Impact_and_Hospital_Capacity_by_Facility.csv")
+
+temp_date_filtered <- temp %>% 
+  filter(collection_week == "2020-11-06")
 
 ```
 
 
+```{r}
+Graph_Hospital_Bed_Usage_By_County <- function(date){
+  hospital_bed_data <- get_bed_utilization_data(date = date)
+  
+  # calculate ratios
+  hospital_bed_data <- hospital_bed_data %>% 
+    mutate(
+      bed_usage_ratio = inpatient_beds_used_7_day_avg / inpatient_beds_7_day_avg * 100,
+      covid_bed_usage_ratio = inpatient_beds_used_covid_7_day_avg / inpatient_beds_7_day_avg * 100,
+      covid_bed_usage_total_bed_usage_ratio = inpatient_beds_used_covid_7_day_avg / inpatient_beds_used_7_day_avg
+    )
+  
+  
+  county_bed_ratios <- hospital_bed_data %>% 
+    group_by(fips_code) %>% 
+    summarise(
+      bed_usage_ratio = mean(bed_usage_ratio, na.rm = TRUE), 
+      covid_bed_usage_ratio = mean(covid_bed_usage_ratio, na.rm = TRUE), 
+      covid_bed_usage_total_bed_usage_ratio = mean(covid_bed_usage_total_bed_usage_ratio, na.rm = TRUE))
+  
+  
+  
+  us_county_shape_data %>% 
+    left_join(county_bed_ratios, by = c("fips" = "fips_code")) %>% 
+    
+    ggplot() +
+      geom_sf(aes(fill = covid_bed_usage_ratio/100)) +
+      scale_fill_continuous("Beds Used for Covid", low="deepskyblue", high="green", labels = scales::percent) +
+      ggtitle("Hospital Bed Usage", subtitle = "Percentage of county's total hospital beds used by covid patients") +
+      my_map_theme()
+}
+
+
+```
 
 graph covid bed usage ratio
 
 ```{r}
+Graph_Hospital_Bed_Usage_By_County("2020/11/06")
 
-wa_counties_map_geometry %>% 
-  left_join(bed_ratios, by = c("fips" = "fips_code")) %>% 
-  ggplot() +
-  geom_sf(aes(fill = covid_bed_usage_ratio)) +
-  my_map_theme()
-
-us_county_map_geometry %>% 
-  left_join(bed_ratios, by = c("fips" = "fips_code")) %>% 
-  ggplot() +
-  geom_sf(aes(fill = covid_bed_usage_ratio)) +
-  my_map_theme()
+Graph_Hospital_Bed_Usage_By_County("2022/07/22")
 
 ```
-```{r}
-
-  
-```
-
-```{r}
-library(sf)
-
-hhr_region_map <- st_read("hhr/Hrr98Bdry_AK_HI_unmodified.shp")
-
-projection <- st_transform(hhr_region_map, 'EPSG:2163')
-
-ggplot(projection) +
-  geom_sf()
 
 ```
 
