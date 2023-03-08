@@ -33,20 +33,27 @@ Global Vars:
 hospital_data_soda_endpoint <- "https://healthdata.gov/resource/anag-cw7u.json"
 vaccination_data_soda_endpoint <- "https://data.cdc.gov/resource/8xkx-amqh.json"
 
-# needed to avoid api throttling
+# needed to avoid soda api throttling
 soda_app_key <- "3tl81UiFuoaJ1DboeqMuy5K9U"
 
 # api url for arcgis hrr boundary shape data
-hrr_boundary_arcgis_endpoint = "https://services.arcgis.com/nzS0F0zdNLvs7nc8/arcgis/rest/services/HRR_boundaries/FeatureServer"
+hrr_boundary_arcgis_endpoint <- "https://services.arcgis.com/nzS0F0zdNLvs7nc8/arcgis/rest/services/HRR_boundaries/FeatureServer"
+
+# url for hrr zip crosswalk zip file from Dartmouth Atlas
+crosswalk_hrr_zip_url <- "https://data.dartmouthatlas.org/downloads/geography/ZipHsaHrr19.csv.zip"
 
 #cached data
 cached_data_folder_base = "cached-data"
 cached_bed_data_folder = paste(cached_data_folder_base, "hospital_bed_usage", sep = "/")
 cached_vaccination_data_folder = paste(cached_data_folder_base, "vaccination_rates", sep = "/")
+cached_zip_hrr_crosswalk_folder = paste(cached_data_folder_base, "crosswalk", sep = "/")
 
 cached_hrr_shapes_filepath = paste(cached_data_folder_base, "hhr_shapes_arcgis_data.shape", sep = "/")
 cached_hospital_bed_data_filepath = paste(cached_bed_data_folder, "hospital_bed_usage_healthdatagov_", sep = "/")
 cached_vaccination_data_filepath = paste(cached_vaccination_data_folder, "vaccination_rates_cdc_", sep = "/")
+
+cached_zip_hrr_crosswalk_compressed_filepath = paste(cached_zip_hrr_crosswalk_folder, "hrr_zip_crosswalk.zip", sep = "/")
+cached_zip_hrr_crosswalk_filepath = paste(cached_zip_hrr_crosswalk_folder, "ZipHsaHrr19.csv", sep = "/")
 
 ```
 
@@ -256,7 +263,7 @@ get_vaccination_rates_data <- function(date){
 ######### HRR BOUNDARY MAP DATA ######### 
 
 # get hrr shapefile data from arcgis
-get_hrr_shapes_arcgis_featureserver_api <- function() {
+get_hrr_shapes_arcgis <- function() {
   
   if( !file.exists(cached_hrr_shapes_filepath) ) {
   
@@ -283,7 +290,21 @@ get_hrr_shapes_arcgis_featureserver_api <- function() {
   return(hrr_shape_data)
 }
 
-### misc ###
+# Get hrr zipcode crosswalk from Dartmouth Atlas zip file
+get_hrr_zip_crosswalk <- function(){
+  if( !file.exists(cached_zip_hrr_crosswalk_compressed_filepath) ) {
+    print("Downloadeing Zip HRR Crosswalk data from Dartmouth Atlas.")
+    download.file(crosswalk_hrr_zip_url, cached_zip_hrr_crosswalk_compressed_filepath)
+    print("Unzipping...")
+    unzip(cached_zip_hrr_crosswalk_compressed_filepath, exdir = cached_zip_hrr_crosswalk_folder)  # unzip your file 
+  }
+  
+  print("Loading crosswalk data from file.")
+  return(read.csv(cached_zip_hrr_crosswalk_filepath) %>% select(zipcode19, hrrnum))
+}
+
+
+#### misc ####
 
 create_data_folder_if_dne <- function(){
   if ( !dir.exists(file.path(cached_data_folder_base)) ) {
@@ -291,6 +312,7 @@ create_data_folder_if_dne <- function(){
     dir.create(cached_data_folder_base)
     dir.create(cached_bed_data_folder)
     dir.create(cached_vaccination_data_folder)
+    dir.create(cached_zip_hrr_crosswalk_folder)
   }
   else
     print("Founds cached data folder.")
@@ -318,9 +340,24 @@ Data sources:
 2. Vaccination Rates in USA - per county
 3. HRR Geography in USA - per HRR number
 4. County Geography in USA - per county
+5. Crosswalk for Zip Code and HRR number
 
 Anytime a new file is downloaded, that file is cached in the "cached-data" folder. Anytime a request is made 
 for a dataset by date, this folder is checked first.
+
+## Local Data Caching
+
+Vaccination data, bed data, hrr boundary data, and ZIP Code HRR Crosswalks are obtained by downloaded 
+from the internet. Only the needed portions of the datasets are requested from the corresponding endpoints. 
+Before downloading, this application first checks if the dataset has already been downloaded in a local cache 
+file. Whenever a new portion of a dataset is downloaded, it is saved to the cache folder local to the application 
+folder.
+
+Setup the data caching folder:
+
+```{r}
+create_data_folder_if_dne()
+```
 
 ## Vaccination Rates Data per US County
 
@@ -384,39 +421,30 @@ us_county_shape_data <- counties_sf("laea") %>%
   mutate(fips = as.numeric(as.character(fips)))
 ```
 
-
 ### Hospital Referral Region Shape Data
 
 Shape data for USA HRR regions are downloaded from arcgis.com using their "FeatureServer" REST api.
 
 https://www.arcgis.com/home/item.html?id=46bf6790c4e0455e9379ee9769b1a5ab
 
+HRR number to zip code translation (2019)
+
+A Crosswalk to correlate zip codes with hrr numbers is needed. This crosswalk is obtained from Dartmouth Atlas as a zip file.
+this file is unzipped and loaded. 
+
+https://data.dartmouthatlas.org/supplemental/#crosswalks
 
 ```{r}
 # Get hrr shapes for mapping
-hrr_shape_data <- get_hrr_shapes_arcgis_featureserver_api()
+hrr_shape_data <- get_hrr_shapes_arcgis()
+zip_hrr_crosswalk_data <- get_hrr_zip_crosswalk()
 ```
-## Local Data Caching
-
-Vaccination data, bed data, hrr boundary data, and ZIP Code HRR Crosswalks are obtained by downloaded 
-from the internet. Only the needed portions of the datasets are requested from the corresponding endpoints. 
-Before downloading, this application first checks if the dataset has already been downloaded in a local cache 
-file. Whenever a new portion of a dataset is downloaded, it is saved to the cache folder local to the application 
-folder.
-
-Setup the data caching folder:
-
-```{r}
-create_data_folder_if_dne()
-```
-
 
 # GGPLOT Maps
 
 ### Graph by Date Functions
 
 ```{r}
-
 ### Date must be given in yyyymmdd format
 Graph_Vaccination_Rates_By_County <- function(date) {
   vaccination_data = get_vaccination_rates_data(date = date)
@@ -432,35 +460,7 @@ Graph_Vaccination_Rates_By_County <- function(date) {
     my_map_theme()
 }
 
-```
-
-### Vaccination Rates Map
-
-```{r}
-
-
-Graph_Vaccination_Rates_By_County("2021/03/1")
-
-Graph_Vaccination_Rates_By_County("2021/09/24")
-
-
-```
-
-
-
-## Hospital Bed Usage Map
-
-
-```{r}
-temp <- read_csv("cached-data/COVID-19_Reported_Patient_Impact_and_Hospital_Capacity_by_Facility.csv")
-
-temp_date_filtered <- temp %>% 
-  filter(collection_week == "2020-11-06")
-
-```
-
-
-```{r}
+### Date must be given in yyyymmdd format
 Graph_Hospital_Bed_Usage_By_County <- function(date){
   hospital_bed_data <- get_bed_utilization_data(date = date)
   
@@ -492,19 +492,34 @@ Graph_Hospital_Bed_Usage_By_County <- function(date){
       my_map_theme()
 }
 
+```
+
+
+### Vaccination Rates Map
+
+```{r}
+Graph_Vaccination_Rates_By_County("2021/03/1")
+
+Graph_Vaccination_Rates_By_County("2021/09/24")
 
 ```
 
-graph covid bed usage ratio
+
+
+## Hospital Bed Usage Map
+
+#### By County
 
 ```{r}
 Graph_Hospital_Bed_Usage_By_County("2020/11/06")
 
 Graph_Hospital_Bed_Usage_By_County("2022/07/22")
-
 ```
 
-```
+#### By HRR
+
+
+
 
 
 ...
