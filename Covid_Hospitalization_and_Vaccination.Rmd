@@ -105,6 +105,7 @@ get_soda_dataframe <- function(endpoint, simple_filter = NULL, where_filter, sel
 #               state
 #               hospital_name
 #               city
+#               zip
 #               fips_code
 #               inpatient_beds_7_day_avg
 #               inpatient_beds_used_7_day_avg
@@ -115,14 +116,13 @@ get_bed_utilization_healthdata_gov_soda_api <- function(date){
     endpoint = hospital_data_soda_endpoint,
     #simple_filter = "state='WA'",                              # can add this for smaller dataset for testing (fast soda api call)
     where_filter = paste0("collection_week='",date, "'"),
-    select_filter = "state,hospital_name,city,fips_code,inpatient_beds_7_day_avg,inpatient_beds_used_7_day_avg,inpatient_beds_used_covid_7_day_avg",
+    select_filter = "state,hospital_name,city,zip,fips_code,inpatient_beds_7_day_avg,inpatient_beds_used_7_day_avg,inpatient_beds_used_covid_7_day_avg",
     limit = 7000) %>% 
-    
-    # Converting value types #
     
     # convert values to numeric
     mutate(
       fips_code = as.numeric(fips_code),
+      zip = as.numeric(zip),
       inpatient_beds_7_day_avg = as.numeric(inpatient_beds_7_day_avg),
       inpatient_beds_used_7_day_avg = as.numeric(inpatient_beds_used_7_day_avg),
       inpatient_beds_used_covid_7_day_avg = as.numeric(inpatient_beds_used_covid_7_day_avg)) %>% 
@@ -445,7 +445,7 @@ zip_hrr_crosswalk_data <- get_hrr_zip_crosswalk()
 ### Graph by Date Functions
 
 ```{r}
-### Date must be given in yyyymmdd format
+# Date must be given in yyyymmdd format
 Graph_Vaccination_Rates_By_County <- function(date) {
   vaccination_data = get_vaccination_rates_data(date = date)
   
@@ -460,7 +460,7 @@ Graph_Vaccination_Rates_By_County <- function(date) {
     my_map_theme()
 }
 
-### Date must be given in yyyymmdd format
+# Date must be given in yyyymmdd format
 Graph_Hospital_Bed_Usage_By_County <- function(date){
   hospital_bed_data <- get_bed_utilization_data(date = date)
   
@@ -492,6 +492,40 @@ Graph_Hospital_Bed_Usage_By_County <- function(date){
       my_map_theme()
 }
 
+# Date must be given in yyyymmdd format
+Graph_Hospital_Bed_Usage_By_HRR <- function(date){
+  hospital_bed_data <- get_bed_utilization_data(date)
+  
+  # calculate ratios
+  hospital_bed_data <- hospital_bed_data %>% 
+    mutate(
+      bed_usage_ratio = inpatient_beds_used_7_day_avg / inpatient_beds_7_day_avg * 100,
+      covid_bed_usage_ratio = inpatient_beds_used_covid_7_day_avg / inpatient_beds_7_day_avg * 100,
+      covid_bed_usage_total_bed_usage_ratio = inpatient_beds_used_covid_7_day_avg / inpatient_beds_used_7_day_avg
+    )
+  
+  hrr_bed_ratios <- hospital_bed_data %>% 
+    left_join(zip_hrr_crosswalk_data, by = c("zip" = "zipcode19")) %>% 
+    group_by(hrrnum) %>% 
+    summarise(
+      bed_usage_ratio = mean(bed_usage_ratio, na.rm = TRUE), 
+      covid_bed_usage_ratio = mean(covid_bed_usage_ratio, na.rm = TRUE), 
+      covid_bed_usage_total_bed_usage_ratio = mean(covid_bed_usage_total_bed_usage_ratio, na.rm = TRUE))
+  
+  hrr_ggplot_data <- hrr_shape_data %>% 
+    left_join(hrr_bed_ratios, by = c("HRRNUM" = "hrrnum")) %>% 
+    select(!HRR)  %>% 
+    st_transform(crs= "EPSG:2163")
+    
+  
+  hrr_ggplot_data %>% 
+    ggplot() +
+      geom_sf(aes(fill = covid_bed_usage_ratio/100)) +
+      scale_fill_continuous("Beds Used for Covid", low="purple", high="orange", labels = scales::percent) +
+      ggtitle("Hospital Bed Usage", subtitle = "Percentage of hospital referral region's beds used by covid patients") +
+      my_map_theme()
+}
+
 ```
 
 
@@ -508,7 +542,8 @@ Graph_Vaccination_Rates_By_County("2021/09/24")
 
 ## Hospital Bed Usage Map
 
-#### By County
+
+### By County
 
 ```{r}
 Graph_Hospital_Bed_Usage_By_County("2020/11/06")
@@ -516,7 +551,15 @@ Graph_Hospital_Bed_Usage_By_County("2020/11/06")
 Graph_Hospital_Bed_Usage_By_County("2022/07/22")
 ```
 
-#### By HRR
+### By HRR
+
+```{r}
+
+date = "2022/07/22"
+
+  Graph_Hospital_Bed_Usage_By_HRR(date)
+
+```
 
 
 
