@@ -1,16 +1,4 @@
----
-title: "Covid Hospitalization and Vaccination Study"
-author: "Gregory Maynard"
-date: "`r Sys.Date()`"
-output: openintro::lab_report
----
-
-# Required Packages and Global Variables
-
-required packages:
-
-```{r load-packages, message=FALSE}
-library(openintro)
+library(shiny)
 
 library(tidyverse)
 library(lubridate)
@@ -22,12 +10,12 @@ library(albersusa)
 # for SODA API calls
 library(httr)
 library(jsonlite)
-```
 
 
-Global Vars:
- 
-```{r}
+###############################
+######### GLOBAL VARS ######### 
+###############################
+
 
 # hospital and vaccination data endpoints to soda api
 hospital_data_soda_endpoint <- "https://healthdata.gov/resource/anag-cw7u.json"
@@ -55,23 +43,21 @@ cached_vaccination_data_filepath = paste(cached_vaccination_data_folder, "vaccin
 cached_zip_hrr_crosswalk_compressed_filepath = paste(cached_zip_hrr_crosswalk_folder, "hrr_zip_crosswalk.zip", sep = "/")
 cached_zip_hrr_crosswalk_filepath = paste(cached_zip_hrr_crosswalk_folder, "ZipHsaHrr19.csv", sep = "/")
 
-```
+#############################
+######### FUNCTIONS ######### 
+#############################
 
-
-# Helper Functions
-
-```{r}
 # Returns a dataframe from the given soda api endpoint. 
 get_soda_dataframe <- function(endpoint, simple_filter = NULL, where_filter, select_filter, limit = 1000){
   
   #Build the query
   soda_query = paste0(endpoint, 
-            "?",                                      
-             simple_filter,
-             "&$where=", where_filter,
-             "&$select=", select_filter,
-             "&$limit=", limit,
-             "&$$app_token=", soda_app_key)
+                      "?",                                      
+                      simple_filter,
+                      "&$where=", where_filter,
+                      "&$select=", select_filter,
+                      "&$limit=", limit,
+                      "&$$app_token=", soda_app_key)
   
   print(paste("Query: ", soda_query))
   
@@ -85,12 +71,12 @@ get_soda_dataframe <- function(endpoint, simple_filter = NULL, where_filter, sel
   
   # Converting content to text
   response_content_text = content(response_details,
-                            "text", encoding = "UTF-8")
-   
+                                  "text", encoding = "UTF-8")
+  
   # Parse Json Data
   response_content_json = fromJSON(response_content_text,
-                             flatten = TRUE)
-   
+                                   flatten = TRUE)
+  
   # Converting into dataframe
   soda_dataframe = as.data.frame(response_content_json)
 }
@@ -126,7 +112,7 @@ get_bed_utilization_healthdata_gov_soda_api <- function(date){
       inpatient_beds_7_day_avg = as.numeric(inpatient_beds_7_day_avg),
       inpatient_beds_used_7_day_avg = as.numeric(inpatient_beds_used_7_day_avg),
       inpatient_beds_used_covid_7_day_avg = as.numeric(inpatient_beds_used_covid_7_day_avg)) %>% 
-
+    
     # replace negative bed counts with NA
     mutate(
       inpatient_beds_7_day_avg = ifelse(inpatient_beds_7_day_avg > -1, inpatient_beds_7_day_avg, NA),
@@ -195,29 +181,29 @@ get_vaccination_rates_cdc_soda_api <- function(date){
   
   data = get_soda_dataframe(
     endpoint = vaccination_data_soda_endpoint,
-#    simple_filter = "recip_state='WA'",                              # can add this for smaller dataset for testing (fast soda api call)
+    #    simple_filter = "recip_state='WA'",                              # can add this for smaller dataset for testing (fast soda api call)
     where_filter = paste0("date='",date, "'"),
     select_filter = "date,fips,series_complete_pop_pct,administered_dose1_pop_pct,booster_doses_vax_pct,completeness_pct,census2019",
     limit = 10000)
   
-## Data needs to be converted so it is consistent. We want it to load from the csv 
-## the same way it is retrieved from the soda endpoint
+  ## Data needs to be converted so it is consistent. We want it to load from the csv 
+  ## the same way it is retrieved from the soda endpoint
   
   data <- data %>% mutate(
     date = as_date(date))
-
+  
   if("fips" %in% colnames(data))
     data <- data %>% mutate (fips = as.numeric(fips))
   
   if("series_complete_pop_pct" %in% colnames(data))
     data <- data %>% mutate (series_complete_pop_pct = as.numeric(series_complete_pop_pct))
-
+  
   if("administered_dose1_pop_pct" %in% colnames(data))
     data <- data %>% mutate (administered_dose1_pop_pct = as.numeric(administered_dose1_pop_pct))
   
   if("booster_doses_vax_pct" %in% colnames(data))
     data <- data %>% mutate (booster_doses_vax_pct = as.numeric(booster_doses_vax_pct))
-
+  
   return(data)
 }
 
@@ -261,21 +247,20 @@ get_vaccination_rates_data <- function(date){
 
 
 ######### HRR BOUNDARY MAP DATA ######### 
-
 # get hrr shapefile data from arcgis
 get_hrr_shapes_arcgis <- function() {
   
   if( !file.exists(cached_hrr_shapes_filepath) ) {
-  
+    
     print("No cached hrr shapefile was found. Downloading from arcgis and saving to file...")
     
     # get and save the file
     url = parse_url(hrr_boundary_arcgis_endpoint)
     url$path = paste(url$path, "0/query", sep = "/")
     url$query = list(where = "HRRNUM > -1",
-                      outFields = "*",
-                      returnGeometry = "true",
-                      f = "geojson")
+                     outFields = "*",
+                     returnGeometry = "true",
+                     f = "geojson")
     request = build_url(url)
     
     hrr_shape_data = st_read(request)
@@ -290,6 +275,7 @@ get_hrr_shapes_arcgis <- function() {
   return(hrr_shape_data)
 }
 
+######### HRR CROSSWALK DATA ######### 
 # Get hrr zipcode crosswalk from Dartmouth Atlas zip file
 get_hrr_zip_crosswalk <- function(){
   if( !file.exists(cached_zip_hrr_crosswalk_compressed_filepath) ) {
@@ -318,140 +304,19 @@ create_data_folder_if_dne <- function(){
     print("Founds cached data folder.")
 }
 
-# ggplot theme function
-my_map_theme <- function(){
-  theme(panel.background=element_blank(),
-        axis.text=element_blank(),
-        axis.ticks=element_blank(),
-        axis.title=element_blank())
-}
 
-```
+########################################
+######### MAPPING FUNCTIONS ############
+########################################
 
-
-
-# Data Sources Explained
-
-## TL/DR
-
-Data sources:
-
-1. Hospital Bed Usage in USA - per hospital
-2. Vaccination Rates in USA - per county
-3. HRR Geography in USA - per HRR number
-4. County Geography in USA - per county
-5. Crosswalk for Zip Code and HRR number
-
-Anytime a new file is downloaded, that file is cached in the "cached-data" folder. Anytime a request is made 
-for a dataset by date, this folder is checked first.
-
-## Local Data Caching
-
-Vaccination data, bed data, hrr boundary data, and ZIP Code HRR Crosswalks are obtained by downloaded 
-from the internet. Only the needed portions of the datasets are requested from the corresponding endpoints. 
-Before downloading, this application first checks if the dataset has already been downloaded in a local cache 
-file. Whenever a new portion of a dataset is downloaded, it is saved to the cache folder local to the application 
-folder.
-
-Setup the data caching folder:
-
-```{r}
-create_data_folder_if_dne()
-```
-
-## Vaccination Rates Data per US County
-
-Vaccination rates are obtained from the CDC: https://data.cdc.gov/Vaccinations/COVID-19-Vaccinations-in-the-United-States-County/8xkx-amqh. 
-This dataset is large, so instead of downloading the whole dataset, this application accesses it through the SODA API and retrieves only the 
-relevant rows and columns.
-
-The "COVID-19 Vaccinations in the United States,County" data provides counts and percentages of people who have been 
-vaccinated in each county of the United States.
-
-The variables retrieved are:
-
-* **fips**
-* **series_complete_pop_pct**: "Percent of people who have completed a primary series (have second dose of a two-dose vaccine or one dose of a single-dose vaccine) based on the jurisdiction and county where vaccine recipient lives."
-* **administered_dose1_pop_pct**: "Percent of Total Pop with at least one Dose by State of Residence"
-* **booster_doses_vax_pct**: "Percent of people who completed a primary series and have received a booster (or additional) dose."
-
-## Hospital Capacity Data for USA per Hospital
-
-Hospital bed usage counts is obtained from HealthData.gov: https://healthdata.gov/Hospital/COVID-19-Reported-Patient-Impact-and-Hospital-Capa/anag-cw7u. 
-This dataset is large, so instead of downloading the whole dataset, this application accesses it through the SODA API and retrieves only the 
-relevant rows and columns.
-
-The "COVID-19 Reported Patient Impact and Hospital Capacity by Facility" data provides counts on hospital bed utilization that is aggregated weekly.
-
-The variables retrieved are:
-
-* **Hospital_name** and **fips_code**
-* **inpatient_beds_7_day_avg**: "Average number of total number of staffed inpatient beds in your hospital including all overflow, observation, and active surge/expansion beds used for inpatients (including all ICU beds) reported in the 7-day period."
-* **inpatient_beds_used_7_day_avg**: "Average of total number of staffed inpatient beds that are occupied reported during the 7-day period."
-* **inpatient_beds_used_covid_7_day_avg**: "Average of reported patients currently hospitalized in an inpatient bed who have suspected or confirmed COVID-19 reported during the 7-day period."
-
-*Inpatient bed counts are used instead of total bed counts because many hospitals that only have inpatient bed data do not include data for inpatient and outpatient totals.*
-
-
-#### Calculate ratios for hospital bed usage
-
-We also calculate: 
-
-* **bed_usage_ratio**: The ratio of hospital beds used out of 100 beds (inpatient)
-* **covid_bed_usage_ratio**: The ratio of hospital beds used by covid patients out of 100 beds (inpatient)
-* **covid_bed_usage_total_bed_usage_ratio**: The ratio of hospital beds used by covid patients out of all used beds (inpatient)
-
-#### Calculate average ratios per region
-
-The hospital bed dataset contains records for each hospital. For mapping, each map region will need to represent the average 
-of all hospitals present in that region.
-
-
-## Geographic Shape Data
-
-### US County Shape Data
-
-County shape data is obtained from the Albersusa package.
-
-Load county data using the Alber's projection:
-
-```{r}
-# get county shapes for mapping
-us_county_shape_data <- counties_sf("laea") %>% 
-  mutate(fips = as.numeric(as.character(fips)))
-```
-
-### Hospital Referral Region Shape Data
-
-Shape data for USA HRR regions are downloaded from arcgis.com using their "FeatureServer" REST api.
-
-https://www.arcgis.com/home/item.html?id=46bf6790c4e0455e9379ee9769b1a5ab
-
-HRR number to zip code translation (2019)
-
-A Crosswalk to correlate zip codes with hrr numbers is needed. This crosswalk is obtained from Dartmouth Atlas as a zip file.
-this file is unzipped and loaded. 
-
-https://data.dartmouthatlas.org/supplemental/#crosswalks
-
-```{r}
-# Get hrr shapes for mapping
-hrr_shape_data <- get_hrr_shapes_arcgis()
-zip_hrr_crosswalk_data <- get_hrr_zip_crosswalk()
-```
-
-# GGPLOT Maps
-
-### Graph by Date Functions
-
-```{r}
+### Graph Vaccination Rates
 # Date must be given in yyyymmdd format
 Graph_Vaccination_Rates_By_County <- function(date) {
   vaccination_data = get_vaccination_rates_data(date = date)
   
   vaccination_data = us_county_shape_data %>% 
     left_join(vaccination_data, by = "fips") 
-    
+  
   vaccination_data %>% 
     ggplot() +
     geom_sf(aes(fill = series_complete_pop_pct/100)) +
@@ -460,6 +325,7 @@ Graph_Vaccination_Rates_By_County <- function(date) {
     my_map_theme()
 }
 
+### Graph Hospital Bed Usage (county)
 # Date must be given in yyyymmdd format
 Graph_Hospital_Bed_Usage_By_County <- function(date){
   hospital_bed_data <- get_bed_utilization_data(date = date)
@@ -486,12 +352,13 @@ Graph_Hospital_Bed_Usage_By_County <- function(date){
     left_join(county_bed_ratios, by = c("fips" = "fips_code")) %>% 
     
     ggplot() +
-      geom_sf(aes(fill = covid_bed_usage_ratio/100)) +
-      scale_fill_continuous("Beds Used for Covid", low="deepskyblue", high="green", labels = scales::percent) +
-      ggtitle("Hospital Bed Usage", subtitle = "Percentage of county's total hospital beds used by covid patients") +
-      my_map_theme()
+    geom_sf(aes(fill = covid_bed_usage_ratio/100)) +
+    scale_fill_continuous("Beds Used for Covid", low="deepskyblue", high="green", labels = scales::percent) +
+    ggtitle("Hospital Bed Usage", subtitle = "Percentage of county's total hospital beds used by covid patients") +
+    my_map_theme()
 }
 
+### Graph Hospital Bed Usage (hrr)
 # Date must be given in yyyymmdd format
 Graph_Hospital_Bed_Usage_By_HRR <- function(date){
   hospital_bed_data <- get_bed_utilization_data(date)
@@ -516,88 +383,93 @@ Graph_Hospital_Bed_Usage_By_HRR <- function(date){
     left_join(hrr_bed_ratios, by = c("HRRNUM" = "hrrnum")) %>% 
     select(!HRR)  %>% 
     st_transform(crs= "EPSG:2163")
-    
+  
   
   hrr_ggplot_data %>% 
     ggplot() +
-      geom_sf(aes(fill = covid_bed_usage_ratio/100)) +
-      scale_fill_continuous("Beds Used for Covid", low="purple", high="orange", labels = scales::percent) +
-      ggtitle("Hospital Bed Usage", subtitle = "Percentage of hospital referral region's beds used by covid patients") +
-      my_map_theme()
+    geom_sf(aes(fill = covid_bed_usage_ratio/100)) +
+    scale_fill_continuous("Beds Used for Covid", low="purple", high="orange", labels = scales::percent) +
+    ggtitle("Hospital Bed Usage", subtitle = "Percentage of hospital referral region's beds used by covid patients") +
+    my_map_theme()
 }
 
-```
+
+# ggplot theme function
+my_map_theme <- function(){
+  theme(panel.background=element_blank(),
+        axis.text=element_blank(),
+        axis.ticks=element_blank(),
+        axis.title=element_blank())
+}
 
 
-### Vaccination Rates Map
+#############################
+######### SETUP #############
+#############################
 
-```{r}
-Graph_Vaccination_Rates_By_County("2021/03/1")
+# setup for file caching
+create_data_folder_if_dne()
 
-Graph_Vaccination_Rates_By_County("2021/09/24")
+# get county shapes for mapping
+us_county_shape_data <- counties_sf("laea") %>% 
+  mutate(fips = as.numeric(as.character(fips)))
 
-```
+# Get hrr shapes for mapping
+hrr_shape_data <- get_hrr_shapes_arcgis()
 
-
-
-## Hospital Bed Usage Map
-
-
-### By County
-
-```{r}
-Graph_Hospital_Bed_Usage_By_County("2020/11/06")
-
-Graph_Hospital_Bed_Usage_By_County("2022/07/22")
-```
-
-### By HRR
-
-```{r}
-
-date = "2022/07/22"
-
-  Graph_Hospital_Bed_Usage_By_HRR(date)
-
-```
-
-```{r}
+# Get hrr / zip code crosswalk
+zip_hrr_crosswalk_data <- get_hrr_zip_crosswalk()
 
 
-  hospital_bed_data <- get_bed_utilization_data("2022/07/22")
-  
-  # calculate ratios
-  hospital_bed_data <- hospital_bed_data %>% 
-    mutate(
-      bed_usage_ratio = inpatient_beds_used_7_day_avg / inpatient_beds_7_day_avg * 100,
-      covid_bed_usage_ratio = inpatient_beds_used_covid_7_day_avg / inpatient_beds_7_day_avg * 100,
-      covid_bed_usage_total_bed_usage_ratio = inpatient_beds_used_covid_7_day_avg / inpatient_beds_used_7_day_avg
+
+
+
+
+
+
+##### test
+generate_map <- function(){
+  Graph_Vaccination_Rates_By_County("2021/09/24")
+}
+
+
+#############################
+######### SHINY UI ########## 
+#############################
+
+ui <- fluidPage(
+
+    # Application title
+    titlePanel("Old Faithful Geyser Data"),
+
+    # Sidebar with a slider input for number of bins 
+    sidebarLayout(
+        sidebarPanel(
+            sliderInput("bins",
+                        "Number of bins:",
+                        min = 1,
+                        max = 50,
+                        value = 30)
+        ),
+
+        # Show a plot of the generated distribution
+        mainPanel(
+          plotlyOutput("usaMap")
+        )
     )
-  
-  hrr_bed_ratios <- hospital_bed_data %>% 
-    left_join(zip_hrr_crosswalk_data, by = c("zip" = "zipcode19")) %>% 
-    group_by(hrrnum) %>% 
-    summarise(
-      bed_usage_ratio = mean(bed_usage_ratio, na.rm = TRUE), 
-      covid_bed_usage_ratio = mean(covid_bed_usage_ratio, na.rm = TRUE), 
-      covid_bed_usage_total_bed_usage_ratio = mean(covid_bed_usage_total_bed_usage_ratio, na.rm = TRUE))
-  
-  hrr_ggplot_data <- hrr_shape_data %>% 
-    left_join(hrr_bed_ratios, by = c("HRRNUM" = "hrrnum")) %>% 
-    select(!HRR)  %>% 
-    st_transform(crs= "EPSG:2163")
-    
-  
-  hrr_ggplot_data %>% 
-    ggplot() +
-      geom_sf(aes(fill = covid_bed_usage_ratio/100), linewidth = 0, color=alpha("black",0.1)) +
-      scale_fill_continuous("Beds Used for Covid", low="purple", high="orange", labels = scales::percent) +
-      ggtitle("Hospital Bed Usage", subtitle = "Percentage of hospital referral region's beds used by covid patients") +
-      my_map_theme()
-```
+)
 
 
+##################################
+######### SHINY BACKEND ########## 
+##################################
 
+server <- function(input, output) {
 
-...
+    output$usaMap <- renderPlotly({
+        generate_map()
+    })
+}
 
+# Run the application 
+shinyApp(ui = ui, server = server)
