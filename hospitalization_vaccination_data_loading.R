@@ -289,7 +289,7 @@ get_hrr_zip_crosswalk <- function(){
     unzip(cached_zip_hrr_crosswalk_compressed_filepath, exdir = cached_crosswalk_folder)  # unzip your file 
   }
   
-  df = read_csv(cached_zip_hrr_crosswalk_filepath) %>% select(zipcode19, hrrnum)
+  df = read_csv(cached_zip_hrr_crosswalk_filepath, show_col_types = F) %>% select(zipcode19, hrrnum)
   print("Loaded zip hrr crosswalk data from local cache.")
   return(df)
 }
@@ -309,7 +309,7 @@ get_zcta_population_data <- function(){
   
   
   df = read_csv(cached_zcta_population_data_filepath, show_col_types = F)
-  df = df %>% select(ZCTA5, ZPOP)
+  df = df %>% select(ZCTA5, ZPOP) %>% distinct()
   print("Loaded ZCTA codes and population data from local cache.")
   return(df)
 }

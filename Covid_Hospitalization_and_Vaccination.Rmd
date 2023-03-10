@@ -160,28 +160,20 @@ hrr_shape_data <- get_hrr_shapes_arcgis()
 
 # Get Required Crosswalks
 zip_hrr_crosswalk_data <- get_hrr_zip_crosswalk()
-zip_tract_crosswalk_data <- get_zip_tract_crosswalk()
 
 # get population census data
-usa_census_tract_population <- get_usa_census_tract_population()
+zcta_population_data <- get_zcta_population_data()
 
 ```
 
-### Calculate Zip Code Population
+### Calculate HRR population
+
 
 ```{r}
+debug <- zip_hrr_crosswalk_data %>% inner_join(zcta_population_data, by = c("zipcode19" = "ZCTA5")) %>%  distinct()
 
-
-```
-
-```{r}
-zcta <- read_csv("cached-data/population_data/zcta_tract_rel_10.txt", show_col_types = F)
-
-zcta <- zcta %>% 
-  select(ZCTA5, ZPOP) %>% 
-  dist()
-
-
+sum(zcta_population_data$ZPOP, na.rm = T)
+sum(debug$ZPOP, na.rm = T)
 ```
 
 

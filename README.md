@@ -19,9 +19,8 @@ Vaccination Rate is defined by county and HRRs are defined by zip code. We can't
 
 **We need to know both the population of each HRR and the vaccination rate of each part of that population.**
 
-We determine the vaccination rate of the HHRs by averaging the vaccination rate (given by county) of the zip codes in that HRR. The individual zip code's vaccination rate needs to be weighted by that zip code's population. Population data is obtained from the United States Census Bureau, which is unfortunately not counted by zip code, but by blocks that make up the congressional districts. 
+We determine the vaccination rate of the HHRs by averaging the vaccination rate (given by county) of the zip codes in that HRR. The individual zip code's vaccination rate needs to be weighted by that zip code's population. Population data is obtained from the United States Census Bureau, which is unfortunately not counted by zip code, but by blocks that make up the congressional districts. To estimate the population of zip codes, we will use the 2010 census zip code tabulation records, which approximate the zip codes in which the congressional district blocks lay.
 
-To find zip code population we will use a a Zip Code to Congressional District Crosswalk.
 To find all zip codes in an HRR we will use a Zip Code to HRR crosswalk.
 
 # Data Sources
@@ -30,11 +29,10 @@ To find all zip codes in an HRR we will use a Zip Code to HRR crosswalk.
 
 1. Hospital Bed Usage in USA - per hospital
 2. Vaccination Rates in USA - per county
-3. Population Census in USA - per district
+3. Population Census in USA - per zcta
 4. HRR Geography in USA - per HRR number
 5. County Geography in USA - per county
-6. Crosswalk for Zip Code to Congressional District Tract
-7. Crosswalk for Zip Code and HRR number
+6. Crosswalk for Zip Code and HRR number
 
 Anytime a new file is downloaded, that file is cached in the "cached-data" folder. Anytime a request is made 
 for a dataset by date, this folder is checked first.
@@ -96,13 +94,12 @@ of all hospitals present in that region.
 
 ## Population Census Data
 
-Population data is obtained from the United States Census Bureau through their Decennial Census of Population and Housing APIs. The specific API dataset used is called Redistricting Data (PL 94-171): https://www.census.gov/data/developers/data-sets/decennial-census.html
+Population data is obtained from the United States Census Bureau using their 2010 ZCTA to County Relationship File (zcta_county_rel_10.txt)
 
-API Call: `api.census.gov/data/2020/dec/pl`
+https://www.census.gov/geographies/reference-files/time-series/geo/relationship-files.2010.html#par_textimage_674173622
 
-We obtain population data per census tract:
-
-Variable: `P1_001N`: Total Population
+download: https://www2.census.gov/geo/docs/maps-data/data/rel/zcta_county_rel_10.txt
+column descriptions: https://www.census.gov/programs-surveys/geography/technical-documentation/records-layout/2010-zcta-record-layout.html#par_textimage_0
 
 ## Geographic Shape Data
 
@@ -124,9 +121,3 @@ https://www.arcgis.com/home/item.html?id=46bf6790c4e0455e9379ee9769b1a5ab
 This crosswalk is obtained from Dartmouth Atlas as a zip file.
 
 https://data.dartmouthatlas.org/supplemental/#crosswalks
-
-#### *Congressional District to ZIP translation (2010 Census)*
-
-This crosswalk is obtained from Dartmouth Atlas as a zip file.
-
-https://www.huduser.gov/portal/datasets/usps_crosswalk.html
