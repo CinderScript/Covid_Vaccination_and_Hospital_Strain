@@ -30,9 +30,8 @@ Vaccination Rate is defined by county and HRRs are defined by zip code. We can't
 
 **We need to know both the population of each HRR and the vaccination rate of each part of that population.**
 
-We determine the vaccination rate of the HHRs by averaging the vaccination rate (given by county) of the zip codes in that HRR. The individual zip code's vaccination rate needs to be weighted by that zip code's population. Population data is obtained from the United States Census Bureau, which is unfortunately not counted by zip code, but by blocks that make up the congressional districts. 
+We determine the vaccination rate of the HHRs by averaging the vaccination rate (given by county) of the zip codes in that HRR. The individual zip code's vaccination rate needs to be weighted by that zip code's population. Population data is obtained from the United States Census Bureau, which is unfortunately not counted by zip code, but by blocks that make up the congressional districts. To estimate the population of zip codes, we will use the 2010 census zip code tabulation records, which approximate the zip codes in which the congressional district blocks lay.
 
-To find zip code population we will use a a Zip Code to Congressional District Crosswalk.
 To find all zip codes in an HRR we will use a Zip Code to HRR crosswalk.
 
 # Data Sources
@@ -41,11 +40,10 @@ To find all zip codes in an HRR we will use a Zip Code to HRR crosswalk.
 
 1. Hospital Bed Usage in USA - per hospital
 2. Vaccination Rates in USA - per county
-3. Population Census in USA - per district
+3. Population Census in USA - per zcta
 4. HRR Geography in USA - per HRR number
 5. County Geography in USA - per county
-6. Crosswalk for Zip Code to Congressional District Tract
-7. Crosswalk for Zip Code and HRR number
+6. Crosswalk for Zip Code and HRR number
 
 Anytime a new file is downloaded, that file is cached in the "cached-data" folder. Anytime a request is made 
 for a dataset by date, this folder is checked first.
@@ -107,13 +105,12 @@ of all hospitals present in that region.
 
 ## Population Census Data
 
-Population data is obtained from the United States Census Bureau through their Decennial Census of Population and Housing APIs. The specific API dataset used is called Redistricting Data (PL 94-171): https://www.census.gov/data/developers/data-sets/decennial-census.html
+Population data is obtained from the United States Census Bureau using their 2010 ZCTA to County Relationship File (zcta_county_rel_10.txt)
 
-API Call: `api.census.gov/data/2020/dec/pl`
+https://www.census.gov/geographies/reference-files/time-series/geo/relationship-files.2010.html#par_textimage_674173622
 
-We obtain population data per census tract:
-
-Variable: `P1_001N`: Total Population
+download: https://www2.census.gov/geo/docs/maps-data/data/rel/zcta_county_rel_10.txt
+column descriptions: https://www.census.gov/programs-surveys/geography/technical-documentation/records-layout/2010-zcta-record-layout.html#par_textimage_0
 
 ## Geographic Shape Data
 
@@ -136,12 +133,6 @@ This crosswalk is obtained from Dartmouth Atlas as a zip file.
 
 https://data.dartmouthatlas.org/supplemental/#crosswalks
 
-#### *Congressional District to ZIP translation (2010 Census)*
-
-This crosswalk is obtained from Dartmouth Atlas as a zip file.
-
-https://www.huduser.gov/portal/datasets/usps_crosswalk.html
-
 
 # Load Required Data
 
@@ -154,6 +145,9 @@ create_data_folder_if_dne()
 # get county shapes for mapping
 us_county_shape_data <- counties_sf("laea") %>% 
   mutate(fips = as.numeric(as.character(fips)))
+
+# get state shapes for mapping
+us_state_shape_data <- usa_sf("laea")
 
 # Get hrr shapes for mapping
 hrr_shape_data <- get_hrr_shapes_arcgis()
@@ -168,13 +162,97 @@ zcta_population_data <- get_zcta_population_data()
 
 ### Calculate HRR population
 
+This dataset is needed for the function that calculates vaccination rates of HRRs
 
 ```{r}
-debug <- zip_hrr_crosswalk_data %>% inner_join(zcta_population_data, by = c("zipcode19" = "ZCTA5")) %>%  distinct()
 
-sum(zcta_population_data$ZPOP, na.rm = T)
-sum(debug$ZPOP, na.rm = T)
+
+calculate_hrr_population_zip_slices <- function(){
+ # get population totals of hrr
+  hrr_population_zip_slice = zip_hrr_crosswalk_data %>% 
+    left_join(
+      zcta_population_data, 
+      by = c("zipcode19" = "ZCTA5")) %>%
+    group_by(hrrnum) %>% 
+    summarise(population = sum(POPPT, na.rm = T), zip_count = n())
+  
+  ## check how well the join worked ##
+  
+  total_zcta_pop = sum(zcta_population_data$POPPT, na.rm = T)
+  us_territories_pop_wiki = 3623895
+  usa_zcta_pop = total_zcta_pop - us_territories_pop_wiki
+  
+  total_hrr_pop = sum(hrr_population_zip_slice
+                    $population, na.rm = T)
+  
+  percent_retained = format(total_hrr_pop / total_zcta_pop * 100, digits = 4) 
+  number_lost = format(total_zcta_pop - total_hrr_pop, big.mark=",")
+  
+  print(paste(
+    "After joining US state zip codes with ZCTAs, We keep about", 
+    percent_retained, 
+    "% of the population, loosing", 
+    number_lost, "people." ))
+  
+  print(paste(
+    "zctas also account for the population in us territories, which have a total population of", 
+    format(us_territories_pop_wiki, big.mark = ","), "according to wikipedia."))
+  print(paste(
+    "This pushes the retained popoulation of the states closer to",
+    format(total_hrr_pop / usa_zcta_pop * 100, digits = 4), "percent" ))
+  
+  return(hrr_population_zip_slice)
+}
+
+ 
+hrr_population_zip_slice <- calculate_hrr_population_zip_slices()
+
 ```
+### **Calculate HHR vaccination rate**
+
+**We are using population data for zip code tabulation areas because we don't have counts for zip codes. ZCTAs will be our proxy for zip codes. Because zcta's don't line up exactly with zip codes, the same zcta can be part of more than one county. That is why it is important to know how much of the ZCTA's population is in each county.**
+
+*The Process:*
+
+1. Join the vaccination data for 2021/09/24 with population zip code data by county.
+  * *Now we know the vaccination rate of each zip code*
+2. Join with the zip hhr crosswalk by zip code to zcta.
+  * *Now we know the hrr each zip code is in along with that zip code's vaccination rate*
+3. Join with the known population counts of zip codes by zip code.
+  * *Now we know the slice of population of a zip code inside each county along with that population slice's vaccination rate*
+4. Calculate number of vaccinated people in each zip code's population slice inside each county for each hrr
+5. Divide the number of vaccinated in zip slice by the total hrr population that zip code is in.
+  * *This gives us the "slice vaccination percentage" that contributes to the vaccination percentage of the hrr*
+6. Add up all of the sliced vaccination percentages for each hrr.
+
+
+
+```{r}
+
+calculate_hrr_vaccination_rates <- function(date) {
+
+  vaccination_data = get_vaccination_rates_data(date)
+  
+  zip_hrr_vaccination_population_join = vaccination_data %>% 
+    inner_join(zcta_population_data, by = c("fips" = "GEOID")) %>% 
+    inner_join(zip_hrr_crosswalk_data, by = c("ZCTA5" = "zipcode19")) %>% 
+    select(ZCTA5, fips, POPPT, series_complete_pop_pct, hrrnum) %>% 
+    
+    rename(zcta = ZCTA5, zip_pop_slice_in_fips = POPPT, fips_vaccination_percent = series_complete_pop_pct) %>% 
+    
+    inner_join(hrr_population_zip_slice, by = "hrrnum") %>% 
+    rename(total_hrr_population = population)
+  
+  hrr_vacc_percent = zip_hrr_vaccination_population_join %>% 
+    mutate(num_vacc_in_zip_slice = fips_vaccination_percent * zip_pop_slice_in_fips) %>% 
+    mutate(zip_slice_weighted_vacc_percent = num_vacc_in_zip_slice / total_hrr_population) %>% 
+    select(hrrnum, zip_slice_weighted_vacc_percent) %>% 
+    group_by(hrrnum) %>% 
+    summarise(vacc_percent = sum(zip_slice_weighted_vacc_percent))
+}
+
+```
+
 
 
 
@@ -183,6 +261,10 @@ sum(debug$ZPOP, na.rm = T)
 These functions retrieve data for vaccination rates and hospital bed usage from their respective APIs
 
 ```{r}
+
+##### VACCINATION RATE
+
+#####
 # Date must be given in yyyymmdd format
 Graph_Vaccination_Rates_By_County <- function(date) {
   vaccination_data = get_vaccination_rates_data(date = date)
@@ -199,11 +281,33 @@ Graph_Vaccination_Rates_By_County <- function(date) {
 }
 
 # Date must be given in yyyymmdd format
+Graph_Vaccination_Rates_By_Hrr <- function(date) {
+  vaccination_data = calculate_hrr_vaccination_rates(date = date)
+  
+  hrr_ggplot_data = hrr_shape_data %>% 
+    left_join(vaccination_data, by = c("HRRNUM" = "hrrnum")) %>% 
+    select(!HRR)  %>% 
+    st_transform(crs= "EPSG:2163")
+  
+  hrr_ggplot_data %>% 
+    ggplot() +
+      geom_sf(aes(fill = vacc_percent/100), linewidth = 0, color=alpha("black",0.02)) +
+      geom_sf(data = us_state_shape_data, fill = alpha("black", 0.0)) +
+      scale_fill_continuous("Beds Used for Covid", low="yellow", high="red", labels = scales::percent) +
+      ggtitle("Hospital Bed Usage", subtitle = "Percentage of hospital referral region's beds used by covid patients") +
+      my_map_theme()
+
+}
+
+##### HOSPITAL BED USAGE
+
+#####
+# Date must be given in yyyymmdd format
 Graph_Hospital_Bed_Usage_By_County <- function(date){
-  hospital_bed_data <- get_bed_utilization_data(date = date)
+  hospital_bed_data = get_bed_utilization_data(date = date)
   
   # calculate ratios
-  hospital_bed_data <- hospital_bed_data %>% 
+  hospital_bed_data = hospital_bed_data %>% 
     mutate(
       bed_usage_ratio = inpatient_beds_used_7_day_avg / inpatient_beds_7_day_avg * 100,
       covid_bed_usage_ratio = inpatient_beds_used_covid_7_day_avg / inpatient_beds_7_day_avg * 100,
@@ -211,7 +315,7 @@ Graph_Hospital_Bed_Usage_By_County <- function(date){
     )
   
   
-  county_bed_ratios <- hospital_bed_data %>% 
+  county_bed_ratios = hospital_bed_data %>% 
     group_by(fips_code) %>% 
     summarise(
       bed_usage_ratio = mean(bed_usage_ratio, na.rm = TRUE), 
@@ -230,19 +334,20 @@ Graph_Hospital_Bed_Usage_By_County <- function(date){
       my_map_theme()
 }
 
+#####
 # Date must be given in yyyymmdd format
 Graph_Hospital_Bed_Usage_By_HRR <- function(date){
-  hospital_bed_data <- get_bed_utilization_data(date)
+  hospital_bed_data = get_bed_utilization_data(date)
   
-  # calculate ratios
-  hospital_bed_data <- hospital_bed_data %>% 
+# calculate ratios
+  hospital_bed_data = hospital_bed_data %>% 
     mutate(
       bed_usage_ratio = inpatient_beds_used_7_day_avg / inpatient_beds_7_day_avg * 100,
       covid_bed_usage_ratio = inpatient_beds_used_covid_7_day_avg / inpatient_beds_7_day_avg * 100,
       covid_bed_usage_total_bed_usage_ratio = inpatient_beds_used_covid_7_day_avg / inpatient_beds_used_7_day_avg
     )
   
-  hrr_bed_ratios <- hospital_bed_data %>% 
+  hrr_bed_ratios = hospital_bed_data %>% 
     left_join(zip_hrr_crosswalk_data, by = c("zip" = "zipcode19")) %>% 
     group_by(hrrnum) %>% 
     summarise(
@@ -250,15 +355,15 @@ Graph_Hospital_Bed_Usage_By_HRR <- function(date){
       covid_bed_usage_ratio = mean(covid_bed_usage_ratio, na.rm = TRUE), 
       covid_bed_usage_total_bed_usage_ratio = mean(covid_bed_usage_total_bed_usage_ratio, na.rm = TRUE))
   
-  hrr_ggplot_data <- hrr_shape_data %>% 
+  hrr_ggplot_data = hrr_shape_data %>% 
     left_join(hrr_bed_ratios, by = c("HRRNUM" = "hrrnum")) %>% 
     select(!HRR)  %>% 
     st_transform(crs= "EPSG:2163")
-    
   
   hrr_ggplot_data %>% 
     ggplot() +
-      geom_sf(aes(fill = covid_bed_usage_ratio/100)) +
+      geom_sf(aes(fill = covid_bed_usage_ratio/100), linewidth = 0, color=alpha("black",0.02)) +
+      geom_sf(data = us_state_shape_data, fill = alpha("black", 0.0)) +
       scale_fill_continuous("Beds Used for Covid", low="purple", high="orange", labels = scales::percent) +
       ggtitle("Hospital Bed Usage", subtitle = "Percentage of hospital referral region's beds used by covid patients") +
       my_map_theme()
@@ -267,16 +372,25 @@ Graph_Hospital_Bed_Usage_By_HRR <- function(date){
 ```
 
 
-
 # Example Graphs
 
 ### Vaccination Rates Map
+
+#### By County
 
 ```{r}
 Graph_Vaccination_Rates_By_County("2021/03/1")
 
 Graph_Vaccination_Rates_By_County("2021/09/24")
 
+```
+
+#### By HRR
+
+```{r}
+Graph_Vaccination_Rates_By_Hrr("2021/03/1")
+
+Graph_Vaccination_Rates_By_Hrr("2021/09/24")
 ```
 
 
@@ -295,58 +409,10 @@ Graph_Hospital_Bed_Usage_By_County("2022/07/22")
 #### By HRR
 
 ```{r}
+Graph_Hospital_Bed_Usage_By_HRR("2020/11/06")
 
-date = "2022/07/22"
-
-  Graph_Hospital_Bed_Usage_By_HRR(date)
-
+Graph_Hospital_Bed_Usage_By_HRR("2022/07/22")
 ```
-
-```{r}
-
-
-  hospital_bed_data <- get_bed_utilization_data("2022/07/22")
-  
-  # calculate ratios
-  hospital_bed_data <- hospital_bed_data %>% 
-    mutate(
-      bed_usage_ratio = inpatient_beds_used_7_day_avg / inpatient_beds_7_day_avg * 100,
-      covid_bed_usage_ratio = inpatient_beds_used_covid_7_day_avg / inpatient_beds_7_day_avg * 100,
-      covid_bed_usage_total_bed_usage_ratio = inpatient_beds_used_covid_7_day_avg / inpatient_beds_used_7_day_avg
-    )
-  
-  hrr_bed_ratios <- hospital_bed_data %>% 
-    left_join(zip_hrr_crosswalk_data, by = c("zip" = "zipcode19")) %>% 
-    group_by(hrrnum) %>% 
-    summarise(
-      bed_usage_ratio = mean(bed_usage_ratio, na.rm = TRUE), 
-      covid_bed_usage_ratio = mean(covid_bed_usage_ratio, na.rm = TRUE), 
-      covid_bed_usage_total_bed_usage_ratio = mean(covid_bed_usage_total_bed_usage_ratio, na.rm = TRUE))
-  
-  hrr_ggplot_data <- hrr_shape_data %>% 
-    left_join(hrr_bed_ratios, by = c("HRRNUM" = "hrrnum")) %>% 
-    select(!HRR)  %>% 
-    st_transform(crs= "EPSG:2163")
-    
-  
-  hrr_ggplot_data %>% 
-    ggplot() +
-      geom_sf(aes(fill = covid_bed_usage_ratio/100), linewidth = 0, color=alpha("black",0.1)) +
-      scale_fill_continuous("Beds Used for Covid", low="purple", high="orange", labels = scales::percent) +
-      ggtitle("Hospital Bed Usage", subtitle = "Percentage of hospital referral region's beds used by covid patients") +
-      my_map_theme()
-```
-
-
-
-
-
-```{r}
-
-```
-
-
-
 
 ...
 

@@ -110,7 +110,6 @@ get_bed_utilization_healthdata_gov_soda_api <- function(date){
     # convert values to numeric
     mutate(
       fips_code = as.numeric(fips_code),
-      zip = as.numeric(zip),
       inpatient_beds_7_day_avg = as.numeric(inpatient_beds_7_day_avg),
       inpatient_beds_used_7_day_avg = as.numeric(inpatient_beds_used_7_day_avg),
       inpatient_beds_used_covid_7_day_avg = as.numeric(inpatient_beds_used_covid_7_day_avg)) %>% 
@@ -309,7 +308,10 @@ get_zcta_population_data <- function(){
   
   
   df = read_csv(cached_zcta_population_data_filepath, show_col_types = F)
-  df = df %>% select(ZCTA5, ZPOP) %>% distinct()
+  df = df %>% 
+    select(GEOID, ZCTA5, ZPOP, POPPT) %>% 
+    distinct() %>% 
+    mutate(GEOID = as.numeric(GEOID))
   print("Loaded ZCTA codes and population data from local cache.")
   return(df)
 }
