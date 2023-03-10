@@ -8,6 +8,8 @@ output: openintro::lab_report
 ```{r load-packages, message=FALSE}
 library(openintro)
 
+library(plotly)
+
 # holds all variables and functions responsible for loading and saving datasets
 source("hospitalization_vaccination_data_loading.R")
 ```
@@ -236,20 +238,31 @@ calculate_hrr_vaccination_rates <- function(date) {
   zip_hrr_vaccination_population_join = vaccination_data %>% 
     inner_join(zcta_population_data, by = c("fips" = "GEOID")) %>% 
     inner_join(zip_hrr_crosswalk_data, by = c("ZCTA5" = "zipcode19")) %>% 
-    select(ZCTA5, fips, POPPT, series_complete_pop_pct, hrrnum) %>% 
+    select(ZCTA5, fips, POPPT, series_complete_pop_pct, administered_dose1_pop_pct, hrrnum) %>% 
     
-    rename(zcta = ZCTA5, zip_pop_slice_in_fips = POPPT, fips_vaccination_percent = series_complete_pop_pct) %>% 
+    rename(
+      zcta = ZCTA5, 
+      zip_pop_slice_in_fips = POPPT, 
+      fips_vaccination_percent = series_complete_pop_pct,
+      fips_one_dose_percent = administered_dose1_pop_pct) %>% 
     
     inner_join(hrr_population_zip_slice, by = "hrrnum") %>% 
     rename(total_hrr_population = population)
   
   hrr_vacc_percent = zip_hrr_vaccination_population_join %>% 
-    mutate(num_vacc_in_zip_slice = fips_vaccination_percent * zip_pop_slice_in_fips) %>% 
-    mutate(zip_slice_weighted_vacc_percent = num_vacc_in_zip_slice / total_hrr_population) %>% 
-    select(hrrnum, zip_slice_weighted_vacc_percent) %>% 
+    mutate(
+      num_vacc_in_zip_slice = fips_vaccination_percent * zip_pop_slice_in_fips,           # calculate number in zip of fully vaccinated
+      num_one_dose_in_zip_slice = fips_one_dose_percent * zip_pop_slice_in_fips) %>%       # calculate number in zip of one dose
+    mutate(
+      zip_slice_weighted_vacc_percent = num_vacc_in_zip_slice / total_hrr_population,                  # calculate weighted portion of fully vaccinated
+      zip_slice_weighted_single_dose_percent = num_one_dose_in_zip_slice / total_hrr_population) %>%   # calculate weighted portion of single dose
+    select(hrrnum, zip_slice_weighted_vacc_percent, zip_slice_weighted_single_dose_percent) %>% 
     group_by(hrrnum) %>% 
-    summarise(vacc_percent = sum(zip_slice_weighted_vacc_percent))
+    summarise(
+      vacc_complete_percent = sum(zip_slice_weighted_vacc_percent),
+      single_dose_percent = sum(zip_slice_weighted_single_dose_percent))
 }
+
 
 ```
 
@@ -261,6 +274,11 @@ calculate_hrr_vaccination_rates <- function(date) {
 These functions retrieve data for vaccination rates and hospital bed usage from their respective APIs
 
 ```{r}
+
+graph_interactive <- function(graph){
+  ggplotly(graph, tooltip = "text") %>% 
+    style(hoveron = "fill") 
+}
 
 ##### VACCINATION RATE
 
@@ -275,28 +293,38 @@ Graph_Vaccination_Rates_By_County <- function(date) {
   vaccination_data %>% 
     ggplot() +
     geom_sf(aes(fill = series_complete_pop_pct/100)) +
-    scale_fill_continuous("Fully Vaccinated", low="yellow", high="red", labels = scales::percent) +
+    scale_fill_continuous("Fully Vaccinated", low="red", high="yellow", labels = scales::percent) +
     ggtitle("COVID Vaccination Status", subtitle = "Percentage of county population that is fully vaccinated (from CDC)") +
     my_map_theme()
 }
 
 # Date must be given in yyyymmdd format
 Graph_Vaccination_Rates_By_Hrr <- function(date) {
-  vaccination_data = calculate_hrr_vaccination_rates(date = date)
+  vaccination_data <- calculate_hrr_vaccination_rates("2021/03/1")
   
   hrr_ggplot_data = hrr_shape_data %>% 
     left_join(vaccination_data, by = c("HRRNUM" = "hrrnum")) %>% 
     select(!HRR)  %>% 
-    st_transform(crs= "EPSG:2163")
+    st_transform(crs= "EPSG:2163") %>% 
+      mutate(text = paste0(
+      "State: ", HRRSTATE_long, 
+      "</b>\nFully Vaccinated: ", format(vacc_complete_percent, digits = 4), "%",
+      "</b>\nHad Single Dose: ", format(single_dose_percent, digits = 4), "%",
+      "</b>\nHRR #: ", HRRNUM,
+      "</b>\nZip Code Count: ", hrr_population_zip_slice$zip_count[HRRNUM],
+      "</b>\nHRR Pop: ", hrr_population_zip_slice$population[HRRNUM]))
   
   hrr_ggplot_data %>% 
     ggplot() +
-      geom_sf(aes(fill = vacc_percent/100), linewidth = 0, color=alpha("black",0.02)) +
-      geom_sf(data = us_state_shape_data, fill = alpha("black", 0.0)) +
-      scale_fill_continuous("Beds Used for Covid", low="yellow", high="red", labels = scales::percent) +
-      ggtitle("Hospital Bed Usage", subtitle = "Percentage of hospital referral region's beds used by covid patients") +
+      geom_sf(
+        aes(fill = vacc_complete_percent/100 + runif(nrow(hrr_ggplot_data), min=0, max=0.001), 
+            text=text), 
+        linewidth = 0.1, 
+        color=alpha("black",0.5)) +
+      # geom_sf(data = us_state_shape_data, fill = alpha("black", 0.0)) +
+      scale_fill_continuous("Fully Vaccinated", low="red", high="yellow", labels = scales::percent) +
+      ggtitle("COVID Vaccination Status", subtitle = "Percentage of county population that is fully vaccinated (from CDC)") +
       my_map_theme()
-
 }
 
 ##### HOSPITAL BED USAGE
@@ -388,9 +416,10 @@ Graph_Vaccination_Rates_By_County("2021/09/24")
 #### By HRR
 
 ```{r}
-Graph_Vaccination_Rates_By_Hrr("2021/03/1")
 
-Graph_Vaccination_Rates_By_Hrr("2021/09/24")
+graph <- Graph_Vaccination_Rates_By_Hrr("2021/09/24")
+graph
+graph_interactive(Graph_Vaccination_Rates_By_Hrr("2021/09/24"))
 ```
 
 
