@@ -178,6 +178,9 @@ hrr_boundary_arcgis_endpoint <- "https://services.arcgis.com/nzS0F0zdNLvs7nc8/ar
 # url for hrr zip crosswalk zip file from Dartmouth Atlas
 crosswalk_hrr_zip_url <- "https://data.dartmouthatlas.org/downloads/geography/ZipHsaHrr19.csv.zip"
 
+# url for tract zip crosswalk zip file from gmail
+crosswalk_zip_tract_url <- "https://drive.google.com/uc?export=download&id=1ggwWf7Qb10kCyoQNQA6-XwCBahl9j_5t"
+
 # United States Census Bureau
 
 us_census_bureau_api_endpoint = ""
@@ -187,14 +190,22 @@ us_census_bureau_api_key = "53b5b224141b01c2e23e7b3928a293b21cc351b9"
 cached_data_folder_base = "cached-data"
 cached_bed_data_folder = paste(cached_data_folder_base, "hospital_bed_usage", sep = "/")
 cached_vaccination_data_folder = paste(cached_data_folder_base, "vaccination_rates", sep = "/")
-cached_zip_hrr_crosswalk_folder = paste(cached_data_folder_base, "crosswalk", sep = "/")
+cached_population_data_folder = paste(cached_data_folder_base, "population_data", sep = "/")
+cached_census_bureau_data_folder = paste(cached_population_data_folder, "census_bureau_data", sep = "/")
+cached_crosswalk_folder = paste(cached_data_folder_base, "crosswalk", sep = "/")
 
 cached_hrr_shapes_filepath = paste(cached_data_folder_base, "hhr_shapes_arcgis_data.shape", sep = "/")
 cached_hospital_bed_data_filepath = paste(cached_bed_data_folder, "hospital_bed_usage_healthdatagov_", sep = "/")
 cached_vaccination_data_filepath = paste(cached_vaccination_data_folder, "vaccination_rates_cdc_", sep = "/")
 
-cached_zip_hrr_crosswalk_compressed_filepath = paste(cached_zip_hrr_crosswalk_folder, "hrr_zip_crosswalk.zip", sep = "/")
-cached_zip_hrr_crosswalk_filepath = paste(cached_zip_hrr_crosswalk_folder, "ZipHsaHrr19.csv", sep = "/")
+cached_population_data_filepath = paste(cached_population_data_folder, "population_data.csv", sep = "/")
+cached_census_bureau_data_filepath = paste(cached_census_bureau_data_folder, "census_bureau_tract_pop_", sep = "/")
+
+cached_zip_hrr_crosswalk_compressed_filepath = paste(cached_crosswalk_folder, "hrr_zip_crosswalk.zip", sep = "/")
+cached_zip_hrr_crosswalk_filepath = paste(cached_crosswalk_folder, "ZipHsaHrr19.csv", sep = "/")
+
+cached_zip_tract_crosswalk_compressed_filepath = paste(cached_crosswalk_folder, "ZIP_TRACT_032020.zip", sep = "/")
+cached_zip_tract_crosswalk_filepath = paste(cached_crosswalk_folder, "ZIP_TRACT_032020.csv", sep = "/")
 
 ```
 
@@ -431,23 +442,89 @@ get_hrr_shapes_arcgis <- function() {
   return(hrr_shape_data)
 }
 
+######### Crosswalks ######### 
+
 # Get hrr zipcode crosswalk from Dartmouth Atlas zip file
 get_hrr_zip_crosswalk <- function(){
   if( !file.exists(cached_zip_hrr_crosswalk_compressed_filepath) ) {
-    print("Downloadeing Zip HRR Crosswalk data from Dartmouth Atlas.")
+    print("Downloading Zip HRR Crosswalk data from Dartmouth Atlas.")
     download.file(crosswalk_hrr_zip_url, cached_zip_hrr_crosswalk_compressed_filepath)
     print("Unzipping...")
-    unzip(cached_zip_hrr_crosswalk_compressed_filepath, exdir = cached_zip_hrr_crosswalk_folder)  # unzip your file 
+    unzip(cached_zip_hrr_crosswalk_compressed_filepath, exdir = cached_crosswalk_folder)  # unzip your file 
   }
   
-  print("Loading crosswalk data from file.")
-  return(read.csv(cached_zip_hrr_crosswalk_filepath) %>% select(zipcode19, hrrnum))
+  df = read.csv(cached_zip_hrr_crosswalk_filepath) %>% select(zipcode19, hrrnum)
+  print("Loaded zip hrr crosswalk data from local cache.")
+  return(df)
 }
 
 
+get_zip_tract_crosswalk <- function(){
+  
+  if( !file.exists(cached_zip_tract_crosswalk_filepath) ) {
+    print("Downloading Zip Tract Crosswalk from google drive (gregmynrd).")
+    download.file(crosswalk_zip_tract_url, cached_zip_tract_crosswalk_compressed_filepath, mode = "wb" )
+    print("Unzipping...")
+    unzip(cached_zip_tract_crosswalk_compressed_filepath, exdir = cached_crosswalk_folder)  # unzip your file
+    
+    # replace with only needed columns
+    write_csv(df, cached_zip_tract_crosswalk_filepath)
+    
+  }
+  
+  print("Loaded Zip Tract Crosswalk from local cache.")
+  df = read_csv("cached-data/crosswalk/ZIP_TRACT_032020.csv", show_col_types = F) %>% select("ZIP", "TRACT")
+  return(df)
+}
 
 ######### Census Data from 2010 ######### 
 
+get_usa_census_tract_population <- function(){
+  
+  # First save population data from internet to cached files if they are not present.
+  # Census files are saved by state.
+  
+  # crosswalk for user friendly file names (state abbr instead of fips)
+  state_fips_crosswalk = us_county_shape_data %>% 
+    st_drop_geometry() %>% 
+    mutate( state_fips = as.character(state_fips), state = as.character(iso_3166_2)) %>% 
+    select(state_fips, state) %>% 
+    distinct() %>% 
+    arrange(state_fips)
+  
+  # Download population for each state's census tract
+  for (fips in state_fips_crosswalk$state_fips) {
+    state_abbr = state_fips_crosswalk$state[state_fips_crosswalk$state_fips==fips]
+    filepath = paste0(cached_census_bureau_data_filepath, state_abbr, ".csv" )
+    
+    if( !file.exists(filepath) ) {
+      print(paste("Downloading census population for: ", state_abbr))
+      regionin_string = paste0("state:", fips, "+county:*")
+      
+      # get population from us census bureau api
+      state_population = getCensus(name = "dec/pl", vintage = 2020,
+                                    vars = c("P1_001N"), 
+                                    region = "tract:*",
+                                    regionin = "state:51+county:*", 
+                                    key = us_census_bureau_api_key) %>% 
+        rename(total_population = P1_001N)
+        
+        write_csv(state_population, filepath)
+    }
+  }
+  
+  #Second - load all cached state population files into a single dataset
+  all_filenames = list.files(path = cached_census_bureau_data_folder, pattern = "*.csv")
+  all_filepaths = paste(cached_census_bureau_data_folder, all_filenames, sep = "/")
+  all_census_files_combined_df =  all_filepaths %>% map_df(~read_csv(., show_col_types = F))
+  
+  usa_census_tract_pop_totals = all_census_files_combined_df %>% 
+    unite("tract_id", c("state", "county", "tract"), sep = "") %>% 
+    mutate(tract_id = as.numeric(tract_id))
+  
+  print("Loaded population data for all usa census tracts.")
+  return(usa_census_tract_pop_totals)
+}
 
 
 
@@ -459,7 +536,9 @@ create_data_folder_if_dne <- function(){
     dir.create(cached_data_folder_base)
     dir.create(cached_bed_data_folder)
     dir.create(cached_vaccination_data_folder)
-    dir.create(cached_zip_hrr_crosswalk_folder)
+    dir.create(cached_crosswalk_folder)
+    dir.create(cached_population_data_folder)
+    dir.create(cached_census_bureau_data_folder)
   }
   else
     print("Founds cached data folder.")
@@ -477,7 +556,7 @@ my_map_theme <- function(){
 
 
 
-### Get Geographic Data
+### Get Geographic, Census, and Crosswalk Data
 
 ```{r}
 # Setup the data caching folder
@@ -489,8 +568,17 @@ us_county_shape_data <- counties_sf("laea") %>%
 
 # Get hrr shapes for mapping
 hrr_shape_data <- get_hrr_shapes_arcgis()
+
+# Get Required Crosswalks
 zip_hrr_crosswalk_data <- get_hrr_zip_crosswalk()
+zip_tract_crosswalk_data <- get_zip_tract_crosswalk()
+
+# get population census data
+usa_census_tract_population <- get_usa_census_tract_population()
+
 ```
+
+
 ### Graph by Date Functions
 
 These functions retrieve data for vaccination rates and hospital bed usage from their respective APIs
@@ -651,47 +739,11 @@ date = "2022/07/22"
 ```
 
 
-```{r}
 
-
-
-```
 
 
 ```{r}
-all_apis <- listCensusApis()
 
-census_meta <-listCensusMetadata(name = "dec/pl", vintage = 2020, type = "variables")
-```
-
-
-## Vaccination Rate of HRR
-
-Vaccination Rate is defined by county and HRRs are defined by zip code. We can't use county data to calculate the vaccination rate of an HRR because these regions overlap. Zip codes in one HRR can live in different counties, and Zip codes in different counties can live in the same HRR.
-
-**We need to know both the population of each HRR and the vaccination rate of each part of that population.**
-
-We determine the vaccination rate of the HHRs by averaging the vaccination rate (given by county) of the zip codes in that HRR. The individual zip code's vaccination rate needs to be weighted by that zip code's population. Population data is obtained from the United States Census Bureau, which is unfortunately not counted by zip code, but by blocks that make up the congressional districts. 
-
-To find zip code population we will use a a Zip Code to Congressional District Crosswalk.
-To find all zip codes in an HRR we will use a Zip Code to HRR crosswalk.
-
-### Data
-
-### Zip Code to Congressional District Crosswalk
-
-This crosswalk is obtained from The U.S. Department of Housing and Urban Development's (HUD's) Office of Policy Development and Research (PD&R)
-
-https://www.huduser.gov/portal/datasets/usps_crosswalk.html
-
-### Zip Code to HRR Crosswalk
-
-```{r}
-  population <- getCensus(name = "dec/pl", vintage = 2020,
-                          vars = c("P1_001N"), 
-                          region = "tract:*",
-                          regionin = "state:51+county:*", 
-                          key = us_census_bureau_api_key)
 ```
 
 
