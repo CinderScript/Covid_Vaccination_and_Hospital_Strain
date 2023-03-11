@@ -140,6 +140,9 @@ https://data.dartmouthatlas.org/supplemental/#crosswalks
 
 ### Get Geographic, Census, and Crosswalk Data
 
+Vaccination data and hospital bed usage data are loaded during the call to the graphing
+function so that only the date needed is loaded into memory.
+
 ```{r}
 # Setup the data caching folder
 create_data_folder_if_dne()
@@ -164,7 +167,7 @@ zcta_population_data <- get_zcta_population_data()
 
 ### Calculate HRR population
 
-This dataset is needed for the function that calculates vaccination rates of HRRs
+A dataset is needed that tracks the population percentages of each ZCTA in each county for the function that calculates vaccination rates of HRRs
 
 ```{r}
 
@@ -268,7 +271,6 @@ calculate_hrr_vaccination_rates <- function(date) {
 
 
 
-
 ### Graph by Date Functions
 
 These functions retrieve data for vaccination rates and hospital bed usage from their respective APIs
@@ -300,7 +302,7 @@ Graph_Vaccination_Rates_By_County <- function(date) {
 
 # Date must be given in yyyymmdd format
 Graph_Vaccination_Rates_By_Hrr <- function(date) {
-  vaccination_data <- calculate_hrr_vaccination_rates("2021/03/1")
+  vaccination_data <- calculate_hrr_vaccination_rates(date)
   
   hrr_ggplot_data = hrr_shape_data %>% 
     left_join(vaccination_data, by = c("HRRNUM" = "hrrnum")) %>% 
@@ -417,8 +419,6 @@ Graph_Vaccination_Rates_By_County("2021/09/24")
 
 ```{r}
 
-graph <- Graph_Vaccination_Rates_By_Hrr("2021/09/24")
-graph
 graph_interactive(Graph_Vaccination_Rates_By_Hrr("2021/09/24"))
 ```
 
@@ -442,6 +442,77 @@ Graph_Hospital_Bed_Usage_By_HRR("2020/11/06")
 
 Graph_Hospital_Bed_Usage_By_HRR("2022/07/22")
 ```
+
+# Selectable Stat Map
+
+```{r}
+
+### Stat Selectable Interactive Graph of Vaccination Rates by HRR
+# Values for `display_stat`:
+#         vacc_complete_percent: Percentage of people fully vaccinated in that HRR
+#         single_dose_percent:   Percentage of people with one vaccine dose in that HRR
+# Date must be given in yyyymmdd format
+Graph_Vaccination_Rates_By_Hrr <- function(date, display_stat) {
+  graph_stat = enquo(display_stat)
+  
+  vaccination_data <- calculate_hrr_vaccination_rates(date)
+  
+  hrr_ggplot_data = hrr_shape_data %>% 
+    left_join(vaccination_data, by = c("HRRNUM" = "hrrnum")) %>% 
+    select(!HRR)  %>% 
+    st_transform(crs= "EPSG:2163") %>% 
+      mutate(text = paste0(
+      "State: ", HRRSTATE_long, 
+      "</b>\nFully Vaccinated: ", format(vacc_complete_percent, digits = 4), "%",
+      "</b>\nHad Single Dose: ", format(single_dose_percent, digits = 4), "%",
+      "</b>\nHRR #: ", HRRNUM,
+      "</b>\nZip Code Count: ", hrr_population_zip_slice$zip_count[HRRNUM],
+      "</b>\nHRR Pop: ", hrr_population_zip_slice$population[HRRNUM]))
+  
+  hrr_ggplot_data %>% 
+    ggplot() +
+      geom_sf(
+        aes(fill = !!graph_stat/100 + runif(nrow(hrr_ggplot_data), min=0, max=0.001), 
+            text=text), 
+        linewidth = 0.1, 
+        color=alpha("black",0.5)) +
+      scale_fill_continuous(
+        "HRR Population", 
+        type = "viridis", 
+        labels = scales::percent, breaks = c(0, .2, .40, .60, .8, 1),  
+        limits= c( 0, 1)) +
+      ggtitle("COVID Vaccination Status of Healthcare Referal Regions") +
+      my_map_theme()
+}
+
+date = "2022-11-02"
+
+  Graph_Vaccination_Rates_By_Hrr(date = date, display_stat = vacc_complete_percent)
+  
+```
+
+```{r}
+
+### Method for selecting appropriate dates for data
+
+valid_vaccination_dates <- read_csv("valid_vaccination_dates.csv", show_col_types = F)$Date
+valid_bed_usage_dates <- read_csv("valid_bed_usage_dates.csv", show_col_types = F)$collection_week
+
+closest_valid_dates <- function(date, list) {
+  
+  closest_index = which.min(abs(ymd(date) - valid_vaccination_dates))
+  vac_date = valid_vaccination_dates[closest_index]
+  
+  closest_index = which.min(abs(ymd(date) - valid_bed_usage_dates))
+  bed_date = valid_bed_usage_dates[closest_index]
+  
+  return(c(vac_date, bed_date))
+  
+}
+
+```
+
+
 
 ...
 
