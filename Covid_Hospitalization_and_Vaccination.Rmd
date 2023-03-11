@@ -163,6 +163,10 @@ zip_hrr_crosswalk_data <- get_hrr_zip_crosswalk()
 # get population census data
 zcta_population_data <- get_zcta_population_data()
 
+hrr_to_state <- hrr_shape_data %>% 
+  st_drop_geometry() %>% 
+  select(HRRNUM, HRRSTATE_long)
+
 ```
 
 ### Calculate HRR population
@@ -512,6 +516,58 @@ closest_valid_dates <- function(date, list) {
 
 ```
 
+
+```{r}
+
+date = "2021-09-23"
+
+dates = closest_valid_dates(ymd(date))
+
+
+# get vaccination data per hrr
+vaccination_data_per_hrr = calculate_hrr_vaccination_rates(dates[1])
+  
+  
+# calculate ratios
+hospital_bed_data_per_hospital = get_bed_utilization_data(dates[2]) %>%  # don't include hospitals with 0 beds
+  filter(inpatient_beds_7_day_avg > 1, state != "TX")                    # TX doesn't have vaccination data
+
+hospital_bed_data_per_hospital = hospital_bed_data_per_hospital %>% 
+  mutate(
+    bed_usage_ratio = inpatient_beds_used_7_day_avg / inpatient_beds_7_day_avg * 100,
+    covid_bed_usage_ratio = inpatient_beds_used_covid_7_day_avg / inpatient_beds_7_day_avg * 100,
+    covid_bed_usage_total_bed_usage_ratio = inpatient_beds_used_covid_7_day_avg / inpatient_beds_used_7_day_avg
+  )
+
+bed_ratios_per_hrr = hospital_bed_data_per_hospital %>% 
+  left_join(zip_hrr_crosswalk_data, by = c("zip" = "zipcode19")) %>% 
+  group_by(hrrnum) %>% 
+  summarise(
+    bed_usage_ratio = mean(bed_usage_ratio, na.rm = TRUE), 
+    covid_bed_usage_ratio = mean(covid_bed_usage_ratio, na.rm = TRUE), 
+    covid_bed_usage_total_bed_usage_ratio = mean(covid_bed_usage_total_bed_usage_ratio, na.rm = TRUE))
+  
+bed_utilization_vaccination_data_hrr = bed_ratios_per_hrr %>% 
+  left_join(vaccination_data_per_hrr, by = "hrrnum") %>% 
+  left_join(hrr_population_zip_slice, by = "hrrnum") %>% 
+  left_join(hrr_to_state, by = c("hrrnum" = "HRRNUM"))
+
+plot_data = bed_utilization_vaccination_data_hrr %>% 
+  mutate(text = paste0(
+    "State: ", HRRSTATE_long, 
+    "</b>\nFully Vaccinated: ", format(vacc_complete_percent, digits = 4), "%",
+    "</b>\nHad Single Dose: ", format(single_dose_percent, digits = 4), "%",
+    "</b>\nHRR #: ", hrrnum,
+    "</b>\nZip Code Count: ", zip_count,
+    "</b>\nHRR Pop: ", population)) %>% 
+  
+  ggplot(aes(x = covid_bed_usage_ratio, y = vacc_complete_percent)) +
+    geom_point(aes(color = population, text=text), alpha = 0.8, size = 0.5) +
+    scale_color_continuous("HRR Population", low="black", high="orange", labels = scales::comma)
+
+graph_interactive(plot_data)
+
+```
 
 
 ...

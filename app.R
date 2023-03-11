@@ -127,7 +127,7 @@ Graph_Vaccination_Rates_By_Hrr <- function(date, display_stat) {
       "</b>\nHad Single Dose: ", format(single_dose_percent, digits = 4), "%",
       "</b>\nHRR #: ", HRRNUM,
       "</b>\nZip Code Count: ", hrr_population_zip_slice$zip_count[HRRNUM],
-      "</b>\nHRR Pop: ", hrr_population_zip_slice$population[HRRNUM]))
+      "</b>\nHRR Pop: ", hrr_population_zip_slice$population[HRRNUM])) 
   
   hrr_ggplot_data %>% 
     ggplot() +
