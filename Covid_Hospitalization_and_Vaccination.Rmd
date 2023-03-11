@@ -274,16 +274,143 @@ calculate_hrr_vaccination_rates <- function(date) {
 ```
 
 
-
 ### Graph by Date Functions
 
 These functions retrieve data for vaccination rates and hospital bed usage from their respective APIs
+
+
+```{r}
+
+possible_axis_labels <- c(
+  "vacc_complete_percent"                 = "Population Fully Vaccinated",
+  "single_dose_percent"                   = "Population With Single Dose",
+  "bed_usage_ratio"                       = "Hospital Beds Used",
+  "covid_bed_usage_ratio"                 = "Hospital Beds Used for Covid",
+  "covid_bed_usage_total_bed_usage_ratio" = "Covid Bed to Total Bed Usage")
+
+
+### Method for selecting appropriate dates for data
+
+valid_vaccination_dates <- read_csv("valid_vaccination_dates.csv", show_col_types = F)$Date
+valid_bed_usage_dates <- read_csv("valid_bed_usage_dates.csv", show_col_types = F)$collection_week
+
+closest_valid_dates <- function(date, list) {
+  
+  closest_index = which.min(abs(ymd(date) - valid_vaccination_dates))
+  vac_date = valid_vaccination_dates[closest_index]
+  
+  closest_index = which.min(abs(ymd(date) - valid_bed_usage_dates))
+  bed_date = valid_bed_usage_dates[closest_index]
+  
+  return(c(vac_date, bed_date))
+  
+}
+
+graph_interactive <- function(graph){
+  ggplotly(graph, tooltip = "text") %>% 
+    style(hoveron = "fill") 
+}
+```
+
+
+#### Point Plot of Vaccination and Hospitalization Stats
+
+
+```{r}
+
+### Vaccination Rate by HHR Graphing Function
+
+### Stat Selectable Interactive Graph of Vaccination Rates by HRR
+#
+# Values for `x_axis` and `y_axis`:
+#         vacc_complete_percent: Percentage of people fully vaccinated in that HRR
+#         single_dose_percent:   Percentage of people with one vaccine dose in that HRR
+#         bed_usage_ratio:                         Percentage of hospital beds used in HRR
+#         covid_bed_usage_ratio:                   Percentage of beds used for COVID in HRR
+#         covid_bed_usage_total_bed_usage_ratio:   Ratio of COVID bed usage to total bed usage
+#
+# Date must be given in yyyymmdd format
+Generate_Vaccination_Plot <- function(date, x_axis, y_axis){
+  
+  x_axis_stat = rlang::parse_expr(x_axis)
+  y_axis_stat = rlang::parse_expr(y_axis)
+
+  x_axis_label = paste0(possible_axis_labels[x_axis])
+  y_axis_label = paste0(possible_axis_labels[y_axis])  
+
+  dates = closest_valid_dates(ymd(date))
+  
+  # Get Vaccination Data
+  vaccination_data_per_hrr = calculate_hrr_vaccination_rates(dates[1])
+    
+  ## Get Hospital Data
+  hospital_bed_data_per_hospital = get_bed_utilization_data(dates[2]) %>%  # don't include hospitals with 0 beds
+    filter(inpatient_beds_7_day_avg > 1, state != "TX")                    # TX doesn't have vaccination data
+  
+  # calculate bed usage ratios
+  hospital_bed_data_per_hospital = hospital_bed_data_per_hospital %>% 
+    mutate(
+      bed_usage_ratio = inpatient_beds_used_7_day_avg / inpatient_beds_7_day_avg * 100,
+      covid_bed_usage_ratio = inpatient_beds_used_covid_7_day_avg / inpatient_beds_7_day_avg * 100,
+      covid_bed_usage_total_bed_usage_ratio = inpatient_beds_used_covid_7_day_avg / inpatient_beds_used_7_day_avg
+    )
+  
+  # Group Hospitals in HRR
+  bed_ratios_per_hrr = hospital_bed_data_per_hospital %>% 
+    left_join(zip_hrr_crosswalk_data, by = c("zip" = "zipcode19")) %>% 
+    group_by(hrrnum) %>% 
+    summarise(
+      bed_usage_ratio = mean(bed_usage_ratio, na.rm = TRUE), 
+      covid_bed_usage_ratio = mean(covid_bed_usage_ratio, na.rm = TRUE), 
+      covid_bed_usage_total_bed_usage_ratio = mean(covid_bed_usage_total_bed_usage_ratio, na.rm = TRUE))
+    
+  # Combine Vaccination and Bed Data (and hrr/state crosswalk)
+  bed_utilization_vaccination_data_hrr = bed_ratios_per_hrr %>% 
+    left_join(vaccination_data_per_hrr, by = "hrrnum") %>% 
+    left_join(hrr_population_zip_slice, by = "hrrnum") %>% 
+    left_join(hrr_to_state, by = c("hrrnum" = "HRRNUM"))
+  
+  plot_data = bed_utilization_vaccination_data_hrr %>% 
+    drop_na() %>%                                         #drop unplottable rows
+    
+    mutate(text = paste0(
+      "HRR #: ", hrrnum,
+      "</b>\nState: ", HRRSTATE_long, 
+      "</b>\nFully Vaccinated: ", format(vacc_complete_percent, digits = 2), "%",
+      "</b>\nHad Single Dose: ", format(single_dose_percent, digits = 1), "%",
+      "</b>\nZip Code Count: ", zip_count,
+      "</b>\nHRR Pop: ", format(population, big.mark = ","))) %>% 
+    mutate(vacc_complete_percent = vacc_complete_percent / 100,
+           single_dose_percent = single_dose_percent/100,
+           covid_bed_usage_ratio = covid_bed_usage_ratio/100,
+           bed_usage_ratio = bed_usage_ratio/100) %>% 
+    
+    ggplot(aes(x = !!x_axis_stat, y = !!y_axis_stat)) +
+      geom_point(color = "black", size = 1.4) +
+      geom_point(aes(color = population, text=text), size = 1.2) +
+      scale_color_continuous(
+          "HRR Population", 
+          trans = "log10",
+          type = "gradient", 
+          labels = scales::comma,
+          low = "blue",
+          high = "gold") +
+    geom_smooth(method = lm, se = F, linewidth = 0.5) +
+    scale_x_continuous(x_axis_label, labels=scales::percent) +
+    scale_y_continuous(y_axis_label, labels=scales::percent)
+}
+
+```
+`
+
+
+#### Map By Date Graphs
 
 ```{r}
 
 graph_interactive <- function(graph){
   ggplotly(graph, tooltip = "text") %>% 
-    style(hoveron = "fill") 
+    style(hoveron = "fills") 
 }
 
 ##### VACCINATION RATE
@@ -408,6 +535,22 @@ Graph_Hospital_Bed_Usage_By_HRR <- function(date){
 
 # Example Graphs
 
+### Vaccination and Hospitalization Point Plot
+
+```{r}
+date = "2021-09-23"
+
+plot_data = Generate_Vaccination_Plot(date, "vacc_complete_percent", "covid_bed_usage_ratio")
+graph_interactive(plot_data)
+
+plot_data = Generate_Vaccination_Plot(date, "covid_bed_usage_ratio", "vacc_complete_percent")
+graph_interactive(plot_data)
+
+plot_data = Generate_Vaccination_Plot(date, "single_dose_percent", "covid_bed_usage_total_bed_usage_ratio")
+graph_interactive(plot_data)
+```
+
+
 ### Vaccination Rates Map
 
 #### By County
@@ -450,6 +593,7 @@ Graph_Hospital_Bed_Usage_By_HRR("2022/07/22")
 # Selectable Stat Map
 
 ```{r}
+### Vaccination Rate by HHR Graphing Function
 
 ### Stat Selectable Interactive Graph of Vaccination Rates by HRR
 # Values for `display_stat`:
@@ -457,6 +601,7 @@ Graph_Hospital_Bed_Usage_By_HRR("2022/07/22")
 #         single_dose_percent:   Percentage of people with one vaccine dose in that HRR
 # Date must be given in yyyymmdd format
 Graph_Vaccination_Rates_By_Hrr <- function(date, display_stat) {
+  
   graph_stat = enquo(display_stat)
   
   vaccination_data <- calculate_hrr_vaccination_rates(date)
@@ -465,110 +610,33 @@ Graph_Vaccination_Rates_By_Hrr <- function(date, display_stat) {
     left_join(vaccination_data, by = c("HRRNUM" = "hrrnum")) %>% 
     select(!HRR)  %>% 
     st_transform(crs= "EPSG:2163") %>% 
-      mutate(text = paste0(
-      "State: ", HRRSTATE_long, 
+    mutate(text = paste0(
+      "HRR #: ", HRRNUM,
+      "</b>\nState: ", HRRSTATE_long, 
       "</b>\nFully Vaccinated: ", format(vacc_complete_percent, digits = 4), "%",
       "</b>\nHad Single Dose: ", format(single_dose_percent, digits = 4), "%",
-      "</b>\nHRR #: ", HRRNUM,
       "</b>\nZip Code Count: ", hrr_population_zip_slice$zip_count[HRRNUM],
       "</b>\nHRR Pop: ", hrr_population_zip_slice$population[HRRNUM]))
   
   hrr_ggplot_data %>% 
     ggplot() +
-      geom_sf(
-        aes(fill = !!graph_stat/100 + runif(nrow(hrr_ggplot_data), min=0, max=0.001), 
-            text=text), 
-        linewidth = 0.1, 
-        color=alpha("black",0.5)) +
-      scale_fill_continuous(
-        "HRR Population", 
-        type = "viridis", 
-        labels = scales::percent, breaks = c(0, .2, .40, .60, .8, 1),  
-        limits= c( 0, 1)) +
-      ggtitle("COVID Vaccination Status of Healthcare Referal Regions") +
-      my_map_theme()
+    geom_sf(
+      aes(fill = !!graph_stat/100 + runif(nrow(hrr_ggplot_data), min=0, max=0.001), 
+          text=text), 
+      linewidth = 0.1, 
+      color=alpha("black",0.5)) +
+    scale_fill_continuous(
+      "HRR Population", 
+      type = "viridis", 
+      labels = scales::percent, breaks = c(0, .2, .40, .60, .8, 1),  
+      limits= c( 0, 1)) +
+    my_map_theme()
 }
 
-date = "2022-11-02"
-
-  Graph_Vaccination_Rates_By_Hrr(date = date, display_stat = vacc_complete_percent)
-  
+graph_interactive(Graph_Vaccination_Rates_By_Hrr("2021/09/24", vacc_complete_percent))
 ```
-
-```{r}
-
-### Method for selecting appropriate dates for data
-
-valid_vaccination_dates <- read_csv("valid_vaccination_dates.csv", show_col_types = F)$Date
-valid_bed_usage_dates <- read_csv("valid_bed_usage_dates.csv", show_col_types = F)$collection_week
-
-closest_valid_dates <- function(date, list) {
-  
-  closest_index = which.min(abs(ymd(date) - valid_vaccination_dates))
-  vac_date = valid_vaccination_dates[closest_index]
-  
-  closest_index = which.min(abs(ymd(date) - valid_bed_usage_dates))
-  bed_date = valid_bed_usage_dates[closest_index]
-  
-  return(c(vac_date, bed_date))
-  
-}
-
-```
-
-
-```{r}
-
-date = "2021-09-23"
-
-dates = closest_valid_dates(ymd(date))
-
-
-# get vaccination data per hrr
-vaccination_data_per_hrr = calculate_hrr_vaccination_rates(dates[1])
   
   
-# calculate ratios
-hospital_bed_data_per_hospital = get_bed_utilization_data(dates[2]) %>%  # don't include hospitals with 0 beds
-  filter(inpatient_beds_7_day_avg > 1, state != "TX")                    # TX doesn't have vaccination data
-
-hospital_bed_data_per_hospital = hospital_bed_data_per_hospital %>% 
-  mutate(
-    bed_usage_ratio = inpatient_beds_used_7_day_avg / inpatient_beds_7_day_avg * 100,
-    covid_bed_usage_ratio = inpatient_beds_used_covid_7_day_avg / inpatient_beds_7_day_avg * 100,
-    covid_bed_usage_total_bed_usage_ratio = inpatient_beds_used_covid_7_day_avg / inpatient_beds_used_7_day_avg
-  )
-
-bed_ratios_per_hrr = hospital_bed_data_per_hospital %>% 
-  left_join(zip_hrr_crosswalk_data, by = c("zip" = "zipcode19")) %>% 
-  group_by(hrrnum) %>% 
-  summarise(
-    bed_usage_ratio = mean(bed_usage_ratio, na.rm = TRUE), 
-    covid_bed_usage_ratio = mean(covid_bed_usage_ratio, na.rm = TRUE), 
-    covid_bed_usage_total_bed_usage_ratio = mean(covid_bed_usage_total_bed_usage_ratio, na.rm = TRUE))
-  
-bed_utilization_vaccination_data_hrr = bed_ratios_per_hrr %>% 
-  left_join(vaccination_data_per_hrr, by = "hrrnum") %>% 
-  left_join(hrr_population_zip_slice, by = "hrrnum") %>% 
-  left_join(hrr_to_state, by = c("hrrnum" = "HRRNUM"))
-
-plot_data = bed_utilization_vaccination_data_hrr %>% 
-  mutate(text = paste0(
-    "State: ", HRRSTATE_long, 
-    "</b>\nFully Vaccinated: ", format(vacc_complete_percent, digits = 4), "%",
-    "</b>\nHad Single Dose: ", format(single_dose_percent, digits = 4), "%",
-    "</b>\nHRR #: ", hrrnum,
-    "</b>\nZip Code Count: ", zip_count,
-    "</b>\nHRR Pop: ", population)) %>% 
-  
-  ggplot(aes(x = covid_bed_usage_ratio, y = vacc_complete_percent)) +
-    geom_point(aes(color = population, text=text), alpha = 0.8, size = 0.5) +
-    scale_color_continuous("HRR Population", low="black", high="orange", labels = scales::comma)
-
-graph_interactive(plot_data)
-
-```
-
-
 ...
+
 

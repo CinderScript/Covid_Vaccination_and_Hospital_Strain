@@ -122,12 +122,12 @@ Graph_Vaccination_Rates_By_Hrr <- function(date, display_stat) {
     select(!HRR)  %>% 
     st_transform(crs= "EPSG:2163") %>% 
     mutate(text = paste0(
-      "State: ", HRRSTATE_long, 
+      "HRR #: ", HRRNUM,
+      "</b>\nState: ", HRRSTATE_long, 
       "</b>\nFully Vaccinated: ", format(vacc_complete_percent, digits = 4), "%",
       "</b>\nHad Single Dose: ", format(single_dose_percent, digits = 4), "%",
-      "</b>\nHRR #: ", HRRNUM,
       "</b>\nZip Code Count: ", hrr_population_zip_slice$zip_count[HRRNUM],
-      "</b>\nHRR Pop: ", hrr_population_zip_slice$population[HRRNUM])) 
+      "</b>\nHRR Pop: ", hrr_population_zip_slice$population[HRRNUM]))
   
   hrr_ggplot_data %>% 
     ggplot() +
@@ -142,6 +142,100 @@ Graph_Vaccination_Rates_By_Hrr <- function(date, display_stat) {
       labels = scales::percent, breaks = c(0, .2, .40, .60, .8, 1),  
       limits= c( 0, 1)) +
     my_map_theme()
+}
+
+graph_interactive <- function(graph){
+  ggplotly(graph, tooltip = "text") %>% 
+    style(hoveron = "fill") 
+}
+
+possible_axis_labels <- c(
+  "vacc_complete_percent"                 = "Population Fully Vaccinated",
+  "single_dose_percent"                   = "Population With Single Dose",
+  "bed_usage_ratio"                       = "Hospital Beds Used",
+  "covid_bed_usage_ratio"                 = "Hospital Beds Used for Covid",
+  "covid_bed_usage_total_bed_usage_ratio" = "Covid Bed to Total Bed Usage")
+
+### Vaccination Rate by HHR Graphing Function
+
+### Stat Selectable Interactive Graph of Vaccination Rates by HRR
+#
+# Values for `x_axis` and `y_axis`:
+#         vacc_complete_percent: Percentage of people fully vaccinated in that HRR
+#         single_dose_percent:   Percentage of people with one vaccine dose in that HRR
+#         bed_usage_ratio:                         Percentage of hospital beds used in HRR
+#         covid_bed_usage_ratio:                   Percentage of beds used for COVID in HRR
+#         covid_bed_usage_total_bed_usage_ratio:   Ratio of COVID bed usage to total bed usage
+#
+# Date must be given in yyyymmdd format
+Generate_Vaccination_Plot <- function(date, x_axis, y_axis){
+  
+  x_axis_stat = rlang::parse_expr(x_axis)
+  y_axis_stat = rlang::parse_expr(y_axis)
+  
+  x_axis_label = paste0(possible_axis_labels[x_axis])
+  y_axis_label = paste0(possible_axis_labels[y_axis])  
+  
+  dates = closest_valid_dates(ymd(date))
+  
+  # Get Vaccination Data
+  vaccination_data_per_hrr = calculate_hrr_vaccination_rates(dates[1])
+  
+  ## Get Hospital Data
+  hospital_bed_data_per_hospital = get_bed_utilization_data(dates[2]) %>%  # don't include hospitals with 0 beds
+    filter(inpatient_beds_7_day_avg > 1, state != "TX")                    # TX doesn't have vaccination data
+  
+  # calculate bed usage ratios
+  hospital_bed_data_per_hospital = hospital_bed_data_per_hospital %>% 
+    mutate(
+      bed_usage_ratio = inpatient_beds_used_7_day_avg / inpatient_beds_7_day_avg * 100,
+      covid_bed_usage_ratio = inpatient_beds_used_covid_7_day_avg / inpatient_beds_7_day_avg * 100,
+      covid_bed_usage_total_bed_usage_ratio = inpatient_beds_used_covid_7_day_avg / inpatient_beds_used_7_day_avg
+    )
+  
+  # Group Hospitals in HRR
+  bed_ratios_per_hrr = hospital_bed_data_per_hospital %>% 
+    left_join(zip_hrr_crosswalk_data, by = c("zip" = "zipcode19")) %>% 
+    group_by(hrrnum) %>% 
+    summarise(
+      bed_usage_ratio = mean(bed_usage_ratio, na.rm = TRUE), 
+      covid_bed_usage_ratio = mean(covid_bed_usage_ratio, na.rm = TRUE), 
+      covid_bed_usage_total_bed_usage_ratio = mean(covid_bed_usage_total_bed_usage_ratio, na.rm = TRUE))
+  
+  # Combine Vaccination and Bed Data (and hrr/state crosswalk)
+  bed_utilization_vaccination_data_hrr = bed_ratios_per_hrr %>% 
+    left_join(vaccination_data_per_hrr, by = "hrrnum") %>% 
+    left_join(hrr_population_zip_slice, by = "hrrnum") %>% 
+    left_join(hrr_to_state, by = c("hrrnum" = "HRRNUM"))
+  
+  plot_data = bed_utilization_vaccination_data_hrr %>% 
+    drop_na() %>%                                         #drop unplottable rows
+    
+    mutate(text = paste0(
+      "HRR #: ", hrrnum,
+      "</b>\nState: ", HRRSTATE_long, 
+      "</b>\nFully Vaccinated: ", format(vacc_complete_percent, digits = 2), "%",
+      "</b>\nHad Single Dose: ", format(single_dose_percent, digits = 1), "%",
+      "</b>\nZip Code Count: ", zip_count,
+      "</b>\nHRR Pop: ", format(population, big.mark = ","))) %>% 
+    mutate(vacc_complete_percent = vacc_complete_percent / 100,
+           single_dose_percent = single_dose_percent/100,
+           covid_bed_usage_ratio = covid_bed_usage_ratio/100,
+           bed_usage_ratio = bed_usage_ratio/100) %>% 
+    
+    ggplot(aes(x = !!x_axis_stat, y = !!y_axis_stat)) +
+    geom_point(color = "black", size = 1.4) +
+    geom_point(aes(color = population, text=text), size = 1.2) +
+    scale_color_continuous(
+      "HRR Population", 
+      trans = "log10",
+      type = "gradient", 
+      labels = scales::comma,
+      low = "blue",
+      high = "gold") +
+    geom_smooth(method = lm, se = F, linewidth = 0.5) +
+    scale_x_continuous(x_axis_label, labels=scales::percent) +
+    scale_y_continuous(y_axis_label, labels=scales::percent)
 }
 
 
@@ -177,11 +271,12 @@ ui <- fluidPage(
 
     # Create separate tabs and inputs for pitching and batting 
     tabsetPanel(id = "tab",
-                tabPanel(title = "Vaccination Levels", value = "vaccination",
+                tabPanel(title = "Vaccination Levels", value = "vaccination_tab",
                          sidebarPanel(selectInput("vaccination_level",
                                                   "Vaccination Level:",
                                                   choices = vaccination_stats, 
                                                   selected = "vacc_complete_percent")),
+                         
                          sidebarPanel(sliderInput("selected_date",
                                                   "Selected vaccination status date:",
                                                   min = as.Date("2020-12-13", "%Y-%m-%d"),
@@ -189,12 +284,19 @@ ui <- fluidPage(
                                                   value = as.Date("2021/09/24"),
                                                   timeFormat="%Y-%m-%d"))
                 ),
-                tabPanel(title = "Hospital Bed Usage", value = "bed",
-                         sidebarPanel(selectInput("p_stat",
-                                                  "Statistic to Plot:",
-                                                  choices = c("1", "2", "3"), 
-                                                  selected = "W")),
-                         sidebarPanel(sliderInput("selected_date2",
+                
+                tabPanel(title = "Vaccination and Hospitalization", value = "vaccination_hospitalization_tab",
+                         sidebarPanel(selectInput("selected_x_axis_stat",
+                                                  "Statistic to Plot on X-Axis:",
+                                                  choices = possible_axis_labels, 
+                                                  selected = "vacc_complete_percent")),
+                         
+                         sidebarPanel(selectInput("selected_y_axis_stat",
+                                                  "Statistic to Plot on Y-Axis:",
+                                                  choices = possible_axis_labels, 
+                                                  selected = "covid_bed_usage_ratio")),
+                         
+                         sidebarPanel(sliderInput("selected_vaccination_hospitalization_date",
                                                   "Number of Players per Season to Display:",
                                                   min = as.Date("2020-12-13", "%Y-%m-%d"),
                                                   max = as.Date("2023-03-03", "%Y-%m-%d"),
@@ -223,7 +325,8 @@ server <- function(input, output) {
 
   output$usaMap <- renderPlotly({
       valid_data_dates = closest_valid_dates(input$selected_date)
-      Graph_Vaccination_Rates_By_Hrr(date = valid_data_dates[1], display_stat = vacc_complete_percent)
+      graph_interactive(
+        Graph_Vaccination_Rates_By_Hrr(date = valid_data_dates[1], display_stat = vacc_complete_percent))
   })
   
   output$statistic_description <- renderText({
