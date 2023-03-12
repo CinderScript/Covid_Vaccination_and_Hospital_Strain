@@ -340,11 +340,6 @@ graph_interactive(plot_data)
 
 ### Vaccination Choropleth Map (HRR)
 
-```{r}
-
-
-
-```
 
 
 # Example Graphs (Static)

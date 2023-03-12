@@ -70,7 +70,7 @@ ui <- fluidPage( useShinyjs(),
           h2(textOutput("graph_title")),
           h4("by Healthcare Referral Region"),
           h4(htmlOutput("statistic_description")),
-          plotlyOutput("graph_dynamic") %>% withSpinner(),
+          plotlyOutput("graph_dynamic"),
           plotOutput("graph_static"),
           checkboxInput("plot_dynamic_toggle", "Make Graph Interactive", T),
           h4(htmlOutput("vacc_data_date")),
@@ -158,18 +158,18 @@ server <- function(input, output, session) {
       
       ### Graph Choropleth
       if (input$tab == "vaccination_choropleth_tab")
-          Graph_Vaccination_Rates_Choropleth_By_Hrr(
+        Graph_Vaccination_Rates_Choropleth_By_Hrr_Static(
             selected_date, display_stat = selected_x_axis)
       
       ### Else Graph Point Plot
       else
-          Graph_Vaccination_Hospitalization_Plot(
+        Graph_Vaccination_Hospitalization_Plot_Static(
             selected_date, selected_x_axis, selected_y_axis)
     }
     else {
       return(NULL)
     }
-  })
+  }, res = 140)
   
   
   #### RENDER TITLES
@@ -195,6 +195,11 @@ server <- function(input, output, session) {
     em(paste("Vaccination data from:", valid_data_dates[1]))
   })
   output$bed_data_date <- renderUI({
+    
+    if (input$tab == "vaccination_choropleth_tab") {
+        return("")
+    }
+    
     valid_data_dates = closest_valid_dates(input$selected_vaccination_map_date)
     em(paste("Hospital bed usage data from:", valid_data_dates[2]))
   })
