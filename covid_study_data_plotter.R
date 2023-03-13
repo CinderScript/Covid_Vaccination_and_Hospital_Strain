@@ -203,6 +203,12 @@ Graph_Vaccination_Rates_Choropleth_By_Hrr <- function(date, display_stat, is_sca
     filter(is.na(!!graph_stat))
   
   
+  # REMOVE TRACES THAT ARE COVERED 
+  # (for performance when converting to plotly)
+  hrr_ggplot_data = hrr_ggplot_data %>% 
+    filter(!is.na(!!graph_stat))
+  
+  
   # CALCULATE LIMITS OF THE SCALE
   scale_limits = c(0,1)
   if (is_scale_range_adaptive) {
@@ -211,6 +217,7 @@ Graph_Vaccination_Rates_Choropleth_By_Hrr <- function(date, display_stat, is_sca
     scale_limits = c(min/100, max/100) #make percentage
   }  
   
+  ### Graph it
   p = hrr_ggplot_data %>% 
     ggplot() +
     geom_sf(                                  # HRR data
@@ -233,7 +240,6 @@ Graph_Vaccination_Rates_Choropleth_By_Hrr <- function(date, display_stat, is_sca
       labels = scales::percent, breaks = c(0, .2, .40, .60, .8, 1),  
       limits = scale_limits) +
     my_map_theme()
-  
 }
 
 ### Vaccination Rate by HHR Choropleth Function - Static
