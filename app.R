@@ -119,7 +119,7 @@ server <- function(input, output, session) {
         
           ### Graph Choropleth
           if (is_choropleth_vacc_map)
-            graph_interactive_map(
+            graph_plotly_choropleth(
               Graph_Vaccination_Rates_Choropleth_By_Hrr(
                 selected_date, 
                 display_stat = selected_x_axis,
@@ -127,7 +127,7 @@ server <- function(input, output, session) {
           
           ### Else Graph Point Plot
           else
-            graph_interactive_plot(
+            graph_plotly_point_plot(
               Graph_Vaccination_Hospitalization_Plot(
                 selected_date, selected_x_axis, selected_y_axis))
       }

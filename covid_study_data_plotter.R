@@ -29,12 +29,14 @@ closest_valid_dates <- function(date, list) {
 }
 
 # converts generated plots to an interactive plot (plotly)
-graph_interactive_map <- function(graph){
+graph_plotly_choropleth <- function(graph){
   ggplotly(graph, tooltip = "text") %>% 
-    style(hoveron = "fills") 
+    style(hoveron = "fills") %>% 
+    style(text = "No Data for HRR", traces = length(.$x$data)-2) %>%  # skip 2nd to last (NA values shape)
+    style(hoverinfo = "skip", traces = length(.$x$data)-1)            # skip last trace (borders)
 }
 
-graph_interactive_plot <- function(graph){
+graph_plotly_point_plot <- function(graph){
   ggplotly(graph, tooltip = "text") %>% 
     style(hoveron = "color") 
 }
@@ -174,15 +176,16 @@ Graph_Vaccination_Hospitalization_Plot_Static <- function(date, x_axis, y_axis){
 #         single_dose_percent:   Percentage of people with one vaccine dose in that HRR
 # Date must be given in yyyymmdd format
 Graph_Vaccination_Rates_Choropleth_By_Hrr <- function(date, display_stat, is_scale_range_adaptive = F) {
-
+  
+  # translate input params
   stat_label = paste0(possible_axis_labels[display_stat])
   graph_stat = rlang::parse_expr(display_stat)
   valid_data_dates = closest_valid_dates(date)
   
-  print(paste("Mapping vaccination level: ", stat_label))
+  # GET VACCINATION STATS
+  vaccination_data = calculate_hrr_vaccination_rates(valid_data_dates[1])
   
-  vaccination_data <- calculate_hrr_vaccination_rates(valid_data_dates[1])
-  
+  # COMBINE WITH HHR SHAPES
   hrr_ggplot_data = hrr_shape_data %>% 
     left_join(vaccination_data, by = c("HRRNUM" = "hrrnum")) %>% 
     select(!HRR)  %>% 
@@ -195,7 +198,12 @@ Graph_Vaccination_Rates_Choropleth_By_Hrr <- function(date, display_stat, is_sca
       "</b>\nZip Code Count: ", hrr_population_zip_slice$zip_count[HRRNUM],
       "</b>\nHRR Pop: ", hrr_population_zip_slice$population[HRRNUM]))
   
-  # Find Scale limits
+  # GET SHAPE OF NA ZONES
+  na_value_shapes = hrr_ggplot_data %>% 
+    filter(is.na(!!graph_stat))
+  
+  
+  # CALCULATE LIMITS OF THE SCALE
   scale_limits = c(0,1)
   if (is_scale_range_adaptive) {
     max = max(vaccination_data[,display_stat])
@@ -203,19 +211,29 @@ Graph_Vaccination_Rates_Choropleth_By_Hrr <- function(date, display_stat, is_sca
     scale_limits = c(min/100, max/100) #make percentage
   }  
   
-  hrr_ggplot_data %>% 
+  p = hrr_ggplot_data %>% 
     ggplot() +
-    geom_sf(
+    geom_sf(                                  # HRR data
       aes(fill = !!graph_stat/100 + runif(nrow(hrr_ggplot_data), min=0, max=0.001), 
           text=text), 
       linewidth = 0.1, 
-      color=alpha("black",0.5)) +
+      color=alpha("darkgreen",0.8))
+  
+  if (nrow(na_value_shapes) > 0) {
+    p = p + geom_sf(data = na_value_shapes,            # regions with NA values (for tooltip value) - trace 290
+                    fill = "gray",
+                    color="gray")
+  }
+  
+  p + geom_sf(data = us_state_shape_data,        # borders: trace 291 (skip hover info)
+              fill = alpha("black", 0.0)) +   
     scale_fill_continuous(
       stat_label, 
       type = "viridis", 
       labels = scales::percent, breaks = c(0, .2, .40, .60, .8, 1),  
       limits = scale_limits) +
     my_map_theme()
+  
 }
 
 ### Vaccination Rate by HHR Choropleth Function - Static
@@ -233,7 +251,7 @@ Graph_Vaccination_Rates_Choropleth_By_Hrr_Static <- function(date, display_stat,
   
   print(paste("Mapping vaccination level: ", stat_label))
   
-  vaccination_data <- calculate_hrr_vaccination_rates(valid_data_dates[1])
+  vaccination_data = calculate_hrr_vaccination_rates(valid_data_dates[1])
   
   hrr_ggplot_data = hrr_shape_data %>% 
     left_join(vaccination_data, by = c("HRRNUM" = "hrrnum")) %>% 
