@@ -294,11 +294,11 @@ TEST <- function(date, display_stat, is_scale_range_adaptive = F) {
     filter(is.na(!!graph_stat))
   
   
-  ### REMOVE TRACES THAT ARE COVERED 
+  # REMOVE TRACES THAT ARE COVERED 
   # (for performance when converting to plotly)
   hrr_ggplot_data = hrr_ggplot_data %>% 
     filter(!is.na(!!graph_stat))
-
+  
   # CALCULATE LIMITS OF THE SCALE
   scale_limits = c(0,1)
   if (is_scale_range_adaptive) {

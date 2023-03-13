@@ -382,7 +382,11 @@ us_county_shape_data <- counties_sf("laea") %>%
   mutate(fips = as.numeric(as.character(fips)))
 
 # get state shapes for mapping
-us_state_shape_data <- usa_sf("laea")
+us_state_shape_data <- usa_sf("laea") %>% 
+  filter(iso_3166_2 != "AK" & iso_3166_2 != "HI")
+
+
+
 
 # Get hrr shapes for mapping
 hrr_shape_data <- get_hrr_shapes_arcgis()
