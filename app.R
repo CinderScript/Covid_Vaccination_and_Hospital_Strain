@@ -70,18 +70,17 @@ ui <- fluidPage( useShinyjs(),
           h2(textOutput("graph_title")),
           h4("by Healthcare Referral Region"),
           h4(htmlOutput("statistic_description")),
-          plotlyOutput("graph_dynamic"),
-          plotOutput("graph_static"),
-          checkboxInput("plot_dynamic_toggle", "Make Graph Interactive", T),
-          h4(htmlOutput("vacc_data_date")),
-          h4(htmlOutput("bed_data_date"))
+          fluidRow(  column(12, plotlyOutput("graph_dynamic"), height = 600)  ),
+          fluidRow(  column(12, plotOutput("graph_static"), height = 600)    ),
+          fluidRow(
+            column(4,checkboxInput("plot_dynamic_toggle", "Interactive Graph", F)), 
+            column(5,checkboxInput("is_scale_range_adaptive_toggle", "Adaptive Scale Range", F))
+            ),
+          hr(),
+          p(htmlOutput("vacc_data_date")),
+          p(htmlOutput("bed_data_date"))
         )
-    )
-
-
-
-
-IS_GRAPH_DYNAMIC <<- F
+)
 
 
 ##################################
@@ -93,32 +92,38 @@ server <- function(input, output, session) {
   ##### RENDER GRAPHS
   output$graph_dynamic <- renderPlotly({
     #date
+      is_choropleth_vacc_map = input$tab == "vaccination_choropleth_tab"
+      is_graph_dynamic = input$plot_dynamic_toggle
+      is_scale_range_adaptive = input$is_scale_range_adaptive_toggle
+    
       selected_date <- ifelse(
-        input$tab == "vaccination_choropleth_tab", 
+        is_choropleth_vacc_map, 
         format(as.Date(input$selected_vaccination_map_date), "%Y-%m-%d"), 
         format(as.Date(input$selected_vaccination_hospitalization_plot_date), "%Y-%m-%d"))
       
     # statistic 1
       selected_x_axis <- ifelse(
-        input$tab == "vaccination_choropleth_tab", 
+        is_choropleth_vacc_map, 
         input$selected_map_vaccination_level, 
         input$selected_x_axis_stat)
     
     #statistic 2
       selected_y_axis <- input$selected_y_axis_stat
       
-    
-      is_graph_dynamic = input$plot_dynamic_toggle
-      toggle("graph_dynamic", condition = input$plot_dynamic_toggle) 
-      toggle("graph_static", condition = !input$plot_dynamic_toggle)
+    # Show / Hide
+      toggle("graph_dynamic", condition = is_graph_dynamic)
+      toggle("graph_static", condition = !is_graph_dynamic)
+      toggle("is_scale_range_adaptive_toggle", condition = is_choropleth_vacc_map)
       
       if (is_graph_dynamic) {         #Plot Selected Graph - dynamic
         
           ### Graph Choropleth
-          if (input$tab == "vaccination_choropleth_tab")
+          if (is_choropleth_vacc_map)
             graph_interactive_map(
               Graph_Vaccination_Rates_Choropleth_By_Hrr(
-                selected_date, display_stat = selected_x_axis))
+                selected_date, 
+                display_stat = selected_x_axis,
+                is_scale_range_adaptive))
           
           ### Else Graph Point Plot
           else
@@ -133,33 +138,39 @@ server <- function(input, output, session) {
   })
   
   output$graph_static <- renderPlot({
+    
+    is_choropleth_vacc_map = input$tab == "vaccination_choropleth_tab"
+    is_graph_dynamic = input$plot_dynamic_toggle
+    is_scale_range_adaptive = input$is_scale_range_adaptive_toggle
+    
     #date
     selected_date <- ifelse(
-      input$tab == "vaccination_choropleth_tab", 
+      is_choropleth_vacc_map, 
       format(as.Date(input$selected_vaccination_map_date), "%Y-%m-%d"), 
       format(as.Date(input$selected_vaccination_hospitalization_plot_date), "%Y-%m-%d"))
     
     # statistic 1
     selected_x_axis <- ifelse(
-      input$tab == "vaccination_choropleth_tab", 
+      is_choropleth_vacc_map, 
       input$selected_map_vaccination_level, 
       input$selected_x_axis_stat)
     
     #statistic 2
     selected_y_axis <- input$selected_y_axis_stat
     
-    
-    is_graph_dynamic = input$plot_dynamic_toggle
-    
-    toggle("graph_dynamic", condition = input$plot_dynamic_toggle) 
-    toggle("graph_static", condition = !input$plot_dynamic_toggle)
+    # Show / Hide
+    toggle("graph_dynamic", condition = is_graph_dynamic)
+    toggle("graph_static", condition = !is_graph_dynamic)
+    toggle("is_scale_range_adaptive_toggle", condition = is_choropleth_vacc_map)
     
     if (!is_graph_dynamic) {         #Plot Selected Graph - static
       
       ### Graph Choropleth
-      if (input$tab == "vaccination_choropleth_tab")
+      if (is_choropleth_vacc_map)
         Graph_Vaccination_Rates_Choropleth_By_Hrr_Static(
-            selected_date, display_stat = selected_x_axis)
+            selected_date, 
+            display_stat = selected_x_axis,
+            is_scale_range_adaptive)
       
       ### Else Graph Point Plot
       else
@@ -169,7 +180,7 @@ server <- function(input, output, session) {
     else {
       return(NULL)
     }
-  }, res = 140)
+  })
   
   
   #### RENDER TITLES

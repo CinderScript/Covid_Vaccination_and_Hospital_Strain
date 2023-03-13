@@ -102,7 +102,8 @@ Graph_Vaccination_Hospitalization_Plot <- function(date, x_axis, y_axis){
         high = "gold") +
       geom_smooth(method = lm, se = F, linewidth = 0.5) +
       scale_x_continuous(x_axis_label, labels=scales::percent) +
-      scale_y_continuous(y_axis_label, labels=scales::percent)
+      scale_y_continuous(y_axis_label, labels=scales::percent) +
+      theme( panel.border = element_rect(fill = NA, colour = "black") )
 }
 
 
@@ -140,17 +141,28 @@ Graph_Vaccination_Hospitalization_Plot_Static <- function(date, x_axis, y_axis){
     
     ### PLOT DATA 
     ggplot(aes(x = !!x_axis_stat, y = !!y_axis_stat)) +
-    geom_point(aes(color = population), size = 1.8, alpha = 0.7) +
-    scale_color_continuous(
+    geom_point(
+      aes(fill = population), 
+      size = 3.5, pch = 21, 
+      color = "black", 
+      alpha = 0.9) +
+    scale_fill_continuous(
       "HRR Population", 
       trans = "log10",
       type = "gradient", 
       labels = scales::comma,
       low = "blue",
-      high = "gold") +
-    geom_smooth(method = lm, se = F, linewidth = 0.5) +
+      high = "gold",
+      guide = guide_colorbar(
+        frame.colour = "black"))  +
+    geom_smooth(method = lm, se = F, linewidth = 1) +
     scale_x_continuous(x_axis_label, labels=scales::percent) +
-    scale_y_continuous(y_axis_label, labels=scales::percent)
+    scale_y_continuous(y_axis_label, labels=scales::percent) +
+    
+    theme(legend.key.size = unit(1, 'cm'),
+          text = element_text(size = 16),
+          legend.key = element_rect(colour = "black"),
+          panel.border = element_rect(fill = NA, colour = "black"))
 }
 
 
@@ -161,8 +173,8 @@ Graph_Vaccination_Hospitalization_Plot_Static <- function(date, x_axis, y_axis){
 #         vacc_complete_percent: Percentage of people fully vaccinated in that HRR
 #         single_dose_percent:   Percentage of people with one vaccine dose in that HRR
 # Date must be given in yyyymmdd format
-Graph_Vaccination_Rates_Choropleth_By_Hrr <- function(date, display_stat) {
-  
+Graph_Vaccination_Rates_Choropleth_By_Hrr <- function(date, display_stat, is_scale_range_adaptive = F) {
+
   stat_label = paste0(possible_axis_labels[display_stat])
   graph_stat = rlang::parse_expr(display_stat)
   valid_data_dates = closest_valid_dates(date)
@@ -183,6 +195,14 @@ Graph_Vaccination_Rates_Choropleth_By_Hrr <- function(date, display_stat) {
       "</b>\nZip Code Count: ", hrr_population_zip_slice$zip_count[HRRNUM],
       "</b>\nHRR Pop: ", hrr_population_zip_slice$population[HRRNUM]))
   
+  # Find Scale limits
+  scale_limits = c(0,1)
+  if (is_scale_range_adaptive) {
+    max = max(vaccination_data[,display_stat])
+    min = min(vaccination_data[,display_stat])
+    scale_limits = c(min/100, max/100) #make percentage
+  }  
+  
   hrr_ggplot_data %>% 
     ggplot() +
     geom_sf(
@@ -194,7 +214,7 @@ Graph_Vaccination_Rates_Choropleth_By_Hrr <- function(date, display_stat) {
       stat_label, 
       type = "viridis", 
       labels = scales::percent, breaks = c(0, .2, .40, .60, .8, 1),  
-      limits= c( 0, 1)) +
+      limits = scale_limits) +
     my_map_theme()
 }
 
@@ -205,7 +225,7 @@ Graph_Vaccination_Rates_Choropleth_By_Hrr <- function(date, display_stat) {
 #         vacc_complete_percent: Percentage of people fully vaccinated in that HRR
 #         single_dose_percent:   Percentage of people with one vaccine dose in that HRR
 # Date must be given in yyyymmdd format
-Graph_Vaccination_Rates_Choropleth_By_Hrr_Static <- function(date, display_stat) {
+Graph_Vaccination_Rates_Choropleth_By_Hrr_Static <- function(date, display_stat, is_scale_range_adaptive = F) {
   
   stat_label = paste0(possible_axis_labels[display_stat])
   graph_stat = rlang::parse_expr(display_stat)
@@ -220,6 +240,14 @@ Graph_Vaccination_Rates_Choropleth_By_Hrr_Static <- function(date, display_stat)
     select(!HRR)  %>% 
     st_transform(crs= "EPSG:2163")
   
+  # Find Scale limits
+  scale_limits = c(0,1)
+  if (is_scale_range_adaptive) {
+    max = max(vaccination_data[,display_stat])
+    min = min(vaccination_data[,display_stat])
+    scale_limits = c(min/100, max/100) #make percentage
+  }
+  
   hrr_ggplot_data %>% 
     ggplot() +
     geom_sf(
@@ -231,6 +259,8 @@ Graph_Vaccination_Rates_Choropleth_By_Hrr_Static <- function(date, display_stat)
       stat_label, 
       type = "viridis", 
       labels = scales::percent, breaks = c(0, .2, .40, .60, .8, 1),  
-      limits= c( 0, 1)) +
-    my_map_theme()
+      limits = scale_limits) +
+    my_map_theme() +
+    theme(legend.key.size = unit(1, 'cm'),
+          text = element_text(size = 16))
 }

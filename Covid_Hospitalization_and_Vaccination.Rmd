@@ -383,6 +383,122 @@ Graph_Hospital_Bed_Usage_By_HRR("2020/11/06")
 Graph_Hospital_Bed_Usage_By_HRR("2022/07/22")
 ```
   
+  
+```{r}
+test <- function(date, x_axis, y_axis){
+  
+  x_axis_stat = rlang::parse_expr(x_axis)
+  y_axis_stat = rlang::parse_expr(y_axis)
+  
+  x_axis_label = paste0(possible_axis_labels[x_axis])
+  y_axis_label = paste0(possible_axis_labels[y_axis])  
+  
+  dates = closest_valid_dates(ymd(date))
+  
+  ### GET ALL NEEDED DATA
+  calculate_bivariate_covid_vaccination_hospital_bed_aggrigate(dates) %>% 
+    
+    drop_na() %>%                                         #drop unplottable rows
+    
+    mutate(vacc_complete_percent = vacc_complete_percent / 100,
+           single_dose_percent = single_dose_percent/100,
+           covid_bed_usage_ratio = covid_bed_usage_ratio/100,
+           bed_usage_ratio = bed_usage_ratio/100) %>% 
+    
+    ### PLOT DATA 
+    ggplot(aes(x = !!x_axis_stat, y = !!y_axis_stat)) +
+    geom_point(
+      aes(fill = population), 
+      size = 3.5, pch = 21, 
+      color = "black", 
+      alpha = 0.9) +
+    scale_fill_continuous(
+      "HRR Population", 
+      trans = "log10",
+      type = "gradient", 
+      labels = scales::comma,
+      low = "blue",
+      high = "gold",
+      guide = guide_colorbar(
+        frame.colour = "black"))  +
+    geom_smooth(method = lm, se = F, linewidth = 1) +
+    scale_x_continuous(x_axis_label, labels=scales::percent) +
+    scale_y_continuous(y_axis_label, labels=scales::percent) +
+    
+    theme(legend.key.size = unit(1, 'cm'),
+          text = element_text(size = 16),
+          legend.key = element_rect(colour = "black"),
+          panel.border = element_rect(fill = NA, colour = "black"))
+}
+
+test("2021-09-23", "vacc_complete_percent", "covid_bed_usage_ratio")
+
+```
+
+```{r}
+test <- function(date, display_stat, is_scale_automatic = F) {
+  
+  stat_label = paste0(possible_axis_labels[display_stat])
+  graph_stat = rlang::parse_expr(display_stat)
+  valid_data_dates = closest_valid_dates(date)
+  
+  print(paste("Mapping vaccination level: ", stat_label))
+  
+  vaccination_data <- calculate_hrr_vaccination_rates(valid_data_dates[1])
+  
+  hrr_ggplot_data = hrr_shape_data %>% 
+    left_join(vaccination_data, by = c("HRRNUM" = "hrrnum")) %>% 
+    select(!HRR)  %>% 
+    st_transform(crs= "EPSG:2163")
+  
+  # Find Scale limits
+  scale_limits = c(0,1)
+  if (is_scale_automatic) {
+     max = max(vaccination_data[,display_stat])
+     min = min(vaccination_data[,display_stat])
+     scale_limits = c(min/100, max/100) #make percentage
+  }
+
+  print(scale_limits)
+
+    hrr_ggplot_data %>% 
+    ggplot() +
+    geom_sf(
+      aes(fill = !!graph_stat/100 + runif(nrow(hrr_ggplot_data), min=0, max=0.001)), 
+      linewidth = 0, 
+      color=alpha("black",0.05)) +
+    geom_sf(data = us_state_shape_data, fill = alpha("black", 0.0)) +
+    scale_fill_continuous(
+      stat_label, 
+      type = "viridis", 
+      labels = scales::percent, breaks = c(0, .2, .40, .60, .8, 1),  
+      limits = NULL) +
+    my_map_theme()
+}
+
+data = test("2022-09-23", "vacc_complete_percent", T)
+```
+  
+```{r}
+test <- function(date, display_stat, is_scale_automatic = F) {
+  
+  stat_label = paste0(possible_axis_labels[display_stat])
+  graph_stat = rlang::parse_expr(display_stat)
+  valid_data_dates = closest_valid_dates(date)
+  
+  vaccination_data <- calculate_hrr_vaccination_rates(valid_data_dates[1])
+  
+  hrr_shape_data %>% 
+    left_join(vaccination_data, by = c("HRRNUM" = "hrrnum")) %>% 
+    select(!HRR) %>% 
+    st_drop_geometry()
+  
+}
+
+data = test("2021-10-05", "vacc_complete_percent", T)
+```
+
+  
 
 ...
 
