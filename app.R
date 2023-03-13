@@ -1,6 +1,6 @@
 library(shiny)
 library(shinyjs)
-library(shinycssloaders)
+#library(shinycssloaders)
 
 
 source("covid_study_data_plotter.R")
@@ -24,12 +24,26 @@ possible_axis_choices <- c(
 ui <- fluidPage( useShinyjs(),
 
     # Application title
-    titlePanel("COVID Vaccination Statistics"),
+    titlePanel("Covid Vaccination and Hospital Strain"),
 
     # Create separate tabs and inputs for pitching and batting 
     tabsetPanel(id = "tab", 
                 
                 h4("Select Statistic and Date to Visualize"),
+                
+                tabPanel(title = "Vaccination Levels Choropleth", value = "vaccination_choropleth_tab",
+                         sidebarPanel(selectInput("selected_map_vaccination_level",
+                                                  "Vaccination Level:",
+                                                  choices = vaccination_stat_choices, 
+                                                  selected = "vacc_complete_percent")),
+                         
+                         sidebarPanel(sliderInput("selected_vaccination_map_date",
+                                                  "Selected vaccination status date:",
+                                                  min = as.Date("2020-12-13", "%Y-%m-%d"),
+                                                  max = as.Date("2023-03-03", "%Y-%m-%d"),
+                                                  value = as.Date("2021/09/24"),
+                                                  timeFormat="%Y-%m-%d"))
+                ),
                 
                 tabPanel(title = "Vaccination and Hospitalization Plot", value = "vaccination_hospitalization_plot_tab",
                          sidebarPanel(selectInput("selected_x_axis_stat",
@@ -48,20 +62,6 @@ ui <- fluidPage( useShinyjs(),
                                                   max = as.Date("2023-03-03", "%Y-%m-%d"),
                                                   value = as.Date("2021/09/24"),
                                                   timeFormat="%Y-%m-%d"))
-                ),
-                
-                tabPanel(title = "Vaccination Levels Choropleth", value = "vaccination_choropleth_tab",
-                         sidebarPanel(selectInput("selected_map_vaccination_level",
-                                                  "Vaccination Level:",
-                                                  choices = vaccination_stat_choices, 
-                                                  selected = "single_dose_percent")),
-                         
-                         sidebarPanel(sliderInput("selected_vaccination_map_date",
-                                                  "Selected vaccination status date:",
-                                                  min = as.Date("2020-12-13", "%Y-%m-%d"),
-                                                  max = as.Date("2023-03-03", "%Y-%m-%d"),
-                                                  value = as.Date("2021/09/24"),
-                                                  timeFormat="%Y-%m-%d"))
                 )
     ),
     
@@ -70,11 +70,11 @@ ui <- fluidPage( useShinyjs(),
           h2(textOutput("graph_title")),
           h4("by Healthcare Referral Region"),
           h4(htmlOutput("statistic_description")),
-          fluidRow(  column(12, plotlyOutput("graph_dynamic"), height = 600)  ),
-          fluidRow(  column(12, plotOutput("graph_static"), height = 600)    ),
+          fluidRow(  column(12, plotlyOutput("graph_dynamic"), height = 800)  ),
+          fluidRow(  column(12, plotOutput("graph_static"), height = 800)    ),
           fluidRow(
-            column(4,checkboxInput("plot_dynamic_toggle", "Interactive Graph", F)), 
-            column(5,checkboxInput("is_scale_range_adaptive_toggle", "Adaptive Scale Range", F))
+            column(2,checkboxInput("plot_dynamic_toggle", "Interactive Graph", F)), 
+            column(2,checkboxInput("is_scale_range_adaptive_toggle", "Adaptive Scale Range", F))
             ),
           hr(),
           p(htmlOutput("vacc_data_date")),

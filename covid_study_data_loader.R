@@ -224,7 +224,7 @@ get_vaccination_rates_cdc_soda_api <- function(date){
 # DATA CLEANING:
 #     Remove TEXAS records before 2021-10-22
 #     Before 2021-10-22, Texas does not have recorded vaccination rates and they 
-#     are recorded as '0' in the dataframe. These are changed to 'NA' so they don't
+#     are recorded as '0' in the dataframe. These records are removed so they don't
 #     throw off the percentages and automatic range scaling
 #
 #     Replace 0% single dose percentages with NA where appropriate
