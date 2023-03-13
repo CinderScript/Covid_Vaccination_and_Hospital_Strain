@@ -459,8 +459,6 @@ test <- function(date, display_stat, is_scale_automatic = F) {
      scale_limits = c(min/100, max/100) #make percentage
   }
 
-  print(scale_limits)
-
     hrr_ggplot_data %>% 
     ggplot() +
     geom_sf(
@@ -479,6 +477,9 @@ test <- function(date, display_stat, is_scale_automatic = F) {
 data = test("2022-09-23", "vacc_complete_percent", T)
 ```
   
+  before 2021-10-22, TX does not have records
+  by "2021-02-01", counties have some single dose percentage - TX is the only one that has 0.
+  
 ```{r}
 test <- function(date, display_stat, is_scale_automatic = F) {
   
@@ -492,10 +493,16 @@ test <- function(date, display_stat, is_scale_automatic = F) {
     left_join(vaccination_data, by = c("HRRNUM" = "hrrnum")) %>% 
     select(!HRR) %>% 
     st_drop_geometry()
-  
 }
 
-data = test("2021-10-05", "vacc_complete_percent", T)
+data = test("2022-10-25", "vacc_complete_percent", T)
+
+data %>% filter(single_dose_percent < vacc_complete_percent)
+```
+```{r}
+
+12345  %/% 1000
+
 ```
 
   

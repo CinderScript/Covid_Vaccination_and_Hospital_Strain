@@ -221,6 +221,18 @@ get_vaccination_rates_cdc_soda_api <- function(date){
 # If no data file is found locally, the downloaded file
 # is saved in the cached data folder.
 #
+# DATA CLEANING:
+#     Remove TEXAS records before 2021-10-22
+#     Before 2021-10-22, Texas does not have recorded vaccination rates and they 
+#     are recorded as '0' in the dataframe. These are changed to 'NA' so they don't
+#     throw off the percentages and automatic range scaling
+#
+#     Replace 0% single dose percentages with NA where appropriate
+#     Also, Many records for the single dose == 0 while series complete is > 0. This isn't
+#     possible so these values probably were not recorded. Replace them with NA so that
+#     future data wrangling ignores those values in calculations.
+#
+#
 # columns selected from dataset: 
 #               fips
 #               series_complete_pop_pct
@@ -229,7 +241,7 @@ get_vaccination_rates_cdc_soda_api <- function(date){
 get_vaccination_rates_data <- function(date){
   
   # ymd is how arguments should be entered and files should be saved
-  date <- ymd(date)
+  date = ymd(date)
   
   # first we need to determine the path/name of the cached data file.
   filepath = paste0(cached_vaccination_data_filepath, date, ".csv")
@@ -250,12 +262,15 @@ get_vaccination_rates_data <- function(date){
     print("Vaccination records loaded from local cache.")
   }
   
-  #### CLEAN THE DATA THAT DOESN'T MAKE SENSE!
-  # Many records for the single dose == 0 while series complete is > 0. This isn't 
-  # possible so these values probably were not recorded. Replace them with NA so that 
-  # future data wrangling ignores those values in calculations.
   
-  data <- data %>% 
+  #### Remove TX data before 2021-10-22
+  tx_fips = 48
+  data = data %>% 
+    filter(fips %/% 1000 != tx_fips | date > as.Date("2021-10-22"))
+  
+  
+  #### replace bad values with NA
+  data = data %>% 
     mutate(
       administered_dose1_pop_pct = ifelse(
         administered_dose1_pop_pct == 0 & series_complete_pop_pct > administered_dose1_pop_pct,   #impossible

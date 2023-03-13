@@ -47,6 +47,14 @@ print(paste(
 # zip code to HHR data to calculate the weighted percentages (by population) each
 # county-based statistic contributes to the HRR.
 #
+# DATA CLEANING:
+#     By 2021-02-01 all HHR region states have some single dose percentage 
+#     TX is the only state that has 0%, which we don't have collected data for. After 
+#     2021-01-31, all entries that have 0% single dose are removed. (All entries that
+#     are either before 2021-02-01 or have some percentage of single dose are kept)
+#
+#     Single Dose percentages cannot be lower than fully vaccinated - replace these values with NA
+#
 # RETURNS:
 #           HRR
 #           vacc_complete_percent
@@ -83,6 +91,11 @@ calculate_hrr_vaccination_rates <- function(date) {
     summarise(
       vacc_complete_percent = sum(zip_slice_weighted_vacc_percent, na.rm = T),
       single_dose_percent = sum(zip_slice_weighted_single_dose_percent, na.rm = T))
+  
+  ### remove 0% single dose rows (impossible) - see function description
+  hrr_vacc_percent %>% 
+    filter(single_dose_percent > 0 | date < ymd("2021-02-01")) %>% 
+    mutate(single_dose_percent = ifelse(single_dose_percent < vacc_complete_percent, NA, single_dose_percent))
 }
 
 ### Calculation of Hospital Bed Usage Rates in HRRs for use with graphing functions
