@@ -24,7 +24,7 @@ possible_axis_choices <- c(
 ui <- fluidPage( useShinyjs(),
 
     # Application title
-    titlePanel("Covid Vaccination and Hospital Strain"),
+    titlePanel("Covid Vaccinations and their Effects on Healthcare"),
 
     # Create separate tabs and inputs for pitching and batting 
     tabsetPanel(id = "tab", 
