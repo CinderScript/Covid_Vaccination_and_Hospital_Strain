@@ -70,8 +70,8 @@ ui <- fluidPage( useShinyjs(),
           h2(textOutput("graph_title")),
           h4("by Healthcare Referral Region"),
           h4(htmlOutput("statistic_description")),
-          fluidRow(  column(12, plotlyOutput("graph_dynamic"), height = 800)  ),
-          fluidRow(  column(12, plotOutput("graph_static"), height = 800)    ),
+          fluidRow(  column(12, plotlyOutput("graph_dynamic"))  ),
+          fluidRow(  column(12, plotOutput("graph_static"))    ),
           fluidRow(
             column(2,checkboxInput("plot_dynamic_toggle", "Interactive Graph", F)), 
             column(2,checkboxInput("is_scale_range_adaptive_toggle", "Adaptive Scale Range", F))
