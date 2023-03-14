@@ -1,6 +1,5 @@
 library(shiny)
-library(shinyjs)
-#library(shinycssloaders)
+library(shinycssloaders)
 
 
 source("covid_study_data_plotter.R")
@@ -26,7 +25,6 @@ ui <- fluidPage( useShinyjs(),
     # Application title
     titlePanel("Covid Vaccinations and their Effects on Healthcare"),
 
-    # Create separate tabs and inputs for pitching and batting 
     tabsetPanel(id = "tab", 
                 
                 h4("Select Statistic and Date to Visualize"),
@@ -70,13 +68,21 @@ ui <- fluidPage( useShinyjs(),
           h2(textOutput("graph_title")),
           h4("by Healthcare Referral Region"),
           h4(htmlOutput("statistic_description")),
-          fluidRow(  column(12, plotlyOutput("graph_dynamic"))  ),
-          fluidRow(  column(12, plotOutput("graph_static"))    ),
+
+          conditionalPanel(
+            condition = "input.plot_dynamic_toggle",
+            plotlyOutput("graph_dynamic") %>% withSpinner()),
+
+          conditionalPanel(
+            condition = "!input.plot_dynamic_toggle",
+            plotOutput("graph_static") %>% withSpinner()),
+
           fluidRow(
             column(2,checkboxInput("plot_dynamic_toggle", "Interactive Graph", F)), 
-            column(2,checkboxInput("is_scale_range_adaptive_toggle", "Adaptive Scale Range", F))
-            ),
+            column(2,checkboxInput("is_scale_range_adaptive_toggle", "Adaptive Scale Range", F))),
+
           hr(),
+          
           p(htmlOutput("vacc_data_date")),
           p(htmlOutput("bed_data_date"))
         )
@@ -111,8 +117,6 @@ server <- function(input, output, session) {
       selected_y_axis <- input$selected_y_axis_stat
       
     # Show / Hide
-      toggle("graph_dynamic", condition = is_graph_dynamic)
-      toggle("graph_static", condition = !is_graph_dynamic)
       toggle("is_scale_range_adaptive_toggle", condition = is_choropleth_vacc_map)
       
       if (is_graph_dynamic) {         #Plot Selected Graph - dynamic
@@ -159,8 +163,6 @@ server <- function(input, output, session) {
     selected_y_axis <- input$selected_y_axis_stat
     
     # Show / Hide
-    toggle("graph_dynamic", condition = is_graph_dynamic)
-    toggle("graph_static", condition = !is_graph_dynamic)
     toggle("is_scale_range_adaptive_toggle", condition = is_choropleth_vacc_map)
     
     if (!is_graph_dynamic) {         #Plot Selected Graph - static
@@ -178,7 +180,7 @@ server <- function(input, output, session) {
             selected_date, selected_x_axis, selected_y_axis)
     }
     else {
-      return(NULL)
+      NULL
     }
   })
   

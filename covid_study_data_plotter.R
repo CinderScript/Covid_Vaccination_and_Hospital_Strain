@@ -255,8 +255,6 @@ Graph_Vaccination_Rates_Choropleth_By_Hrr_Static <- function(date, display_stat,
   graph_stat = rlang::parse_expr(display_stat)
   valid_data_dates = closest_valid_dates(date)
   
-  print(paste("Mapping vaccination level: ", stat_label))
-  
   vaccination_data = calculate_hrr_vaccination_rates(valid_data_dates[1])
   
   hrr_ggplot_data = hrr_shape_data %>% 
