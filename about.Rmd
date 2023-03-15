@@ -202,8 +202,8 @@ Source Dependency:
 ```{r}
 date = "2021-09-23"
 
-plot_data = Graph_Vaccination_Hospitalization_Plot(date, "vacc_complete_percent", "covid_bed_usage_ratio")
-ggplotly(plot_data, tooltip = "text")
+plot_data = Graph_Vaccination_Hospitalization_Plot_Static("2021/10/05", x_axis = "vacc_complete_percent", y_axis = "covid_bed_usage_ratio")
+plot_data
 ```
 
 

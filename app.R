@@ -1,4 +1,5 @@
 library(shiny)
+library(shinyjs)
 library(shinycssloaders)
 
 
@@ -63,29 +64,33 @@ ui <- fluidPage( useShinyjs(),
                 )
     ),
     
-      # Show our plot
-      mainPanel(
-          h2(textOutput("graph_title")),
-          h4("by Healthcare Referral Region"),
-          h4(htmlOutput("statistic_description")),
+    # Show our plot
+    mainPanel(
+        h2(textOutput("graph_title")),
+        h4("by Healthcare Referral Region"),
+        h4(htmlOutput("statistic_description")),
 
-          conditionalPanel(
-            condition = "input.plot_dynamic_toggle",
-            plotlyOutput("graph_dynamic") %>% withSpinner()),
+        conditionalPanel(
+          condition = "input.plot_dynamic_toggle",
+          plotlyOutput("graph_dynamic") %>% withSpinner()),
 
-          conditionalPanel(
-            condition = "!input.plot_dynamic_toggle",
-            plotOutput("graph_static") %>% withSpinner()),
+        conditionalPanel(
+          condition = "!input.plot_dynamic_toggle",
+          plotOutput("graph_static") %>% withSpinner()),
 
-          fluidRow(
-            column(2,checkboxInput("plot_dynamic_toggle", "Interactive Graph", F)), 
-            column(2,checkboxInput("is_scale_range_adaptive_toggle", "Adaptive Scale Range", F))),
+        fluidRow(
+          column(3,checkboxInput("plot_dynamic_toggle", "Interactive Graph", F)), 
+          column(3,checkboxInput("is_scale_range_adaptive_toggle", "Adaptive Scale Range", F))),
 
-          hr(),
-          
-          p(htmlOutput("vacc_data_date")),
-          p(htmlOutput("bed_data_date"))
-        )
+        hr(),
+        
+        p(htmlOutput("vacc_data_date")),
+        p(htmlOutput("bed_data_date")),
+        hr(),
+        p(tags$b("Program Messages:")),
+        p(htmlOutput("message"))
+        
+      )
 )
 
 
@@ -95,6 +100,12 @@ ui <- fluidPage( useShinyjs(),
 
 server <- function(input, output, session) {
 
+  output$message <- renderUI({
+    
+        "example text: Vaccination data succesfully loaded from argvis"
+  })
+  
+  
   ##### RENDER GRAPHS
   output$graph_dynamic <- renderPlotly({
     #date
@@ -117,13 +128,13 @@ server <- function(input, output, session) {
       selected_y_axis <- input$selected_y_axis_stat
       
     # Show / Hide
-      toggle("is_scale_range_adaptive_toggle", condition = is_choropleth_vacc_map)
+      toggleState("is_scale_range_adaptive_toggle", condition = is_choropleth_vacc_map)
       
       if (is_graph_dynamic) {         #Plot Selected Graph - dynamic
         
           ### Graph Choropleth
           if (is_choropleth_vacc_map)
-            graph_plotly_choropleth(
+            graph_plotly_vacc_choropleth(
               Graph_Vaccination_Rates_Choropleth_By_Hrr(
                 selected_date, 
                 display_stat = selected_x_axis,
@@ -163,7 +174,7 @@ server <- function(input, output, session) {
     selected_y_axis <- input$selected_y_axis_stat
     
     # Show / Hide
-    toggle("is_scale_range_adaptive_toggle", condition = is_choropleth_vacc_map)
+    toggleState("is_scale_range_adaptive_toggle", condition = is_choropleth_vacc_map)
     
     if (!is_graph_dynamic) {         #Plot Selected Graph - static
       
