@@ -19,7 +19,7 @@ This is a study of vaccination rate and hospital bed usage in the United States 
 
 #### **Map By Zach Levitt and Dan Keating:**
 
-![Washington Post Bivariate Choropleth Map](washington-post-map.png)
+![Washington Post Bivariate Choropleth Map](www/washington-post-map.png)
 
 ## Methods
 
@@ -200,10 +200,10 @@ Source Dependency:
 
 ### Hospital bed usage vs Vaccination Percentage of HRR
 ```{r}
-date = "2021-09-23"
 
-plot_data = Graph_Vaccination_Hospitalization_Plot_Static("2021/10/05", x_axis = "vacc_complete_percent", y_axis = "covid_bed_usage_ratio")
-plot_data
+graph_plotly_point_plot(
+  Graph_Vaccination_Hospitalization_Plot("2021-09-23", x_axis = "vacc_complete_percent", y_axis = "covid_bed_usage_ratio")
+)
 ```
 
 
@@ -211,218 +211,32 @@ plot_data
 ### Choropleth Graph of Vaccination Stats by HRR
 
 ```{r}
-graph_interactive_map(Graph_Vaccination_Rates_Choropleth_By_Hrr("2021/09/24", display_stat = "vacc_complete_percent"))
-graph_interactive_map(Graph_Vaccination_Rates_Choropleth_By_Hrr("2021/09/24", display_stat = "single_dose_percent", F))
+Graph_Vaccination_Rates_Choropleth_By_Hrr_Static("2021/09/24", display_stat = "vacc_complete_percent")
+graph_plotly_vacc_choropleth(Graph_Vaccination_Rates_Choropleth_By_Hrr("2021/09/24", display_stat = "single_dose_percent", is_scale_adaptive = F))
 ```
-
-
-
-### Choropleth Graph of Vaccination Stats by HRR
 
 
 ### misc
 
-```{r}
-
-graph_interactive <- function(graph){
-  ggplotly(graph, tooltip = "text") %>% 
-    style(hoveron = "fills") 
-}
-
-##### VACCINATION RATE
-
-#####
-# Date must be given in yyyymmdd format
-Graph_Vaccination_Rates_By_County <- function(date) {
-  vaccination_data = get_vaccination_rates_data(date = date)
-  
-  vaccination_data = us_county_shape_data %>% 
-    left_join(vaccination_data, by = "fips") 
-    
-  vaccination_data %>% 
-    ggplot() +
-    geom_sf(aes(fill = series_complete_pop_pct/100)) +
-    scale_fill_continuous("Fully Vaccinated", low="red", high="yellow", labels = scales::percent) +
-    ggtitle("COVID Vaccination Status", subtitle = "Percentage of county population that is fully vaccinated (from CDC)") +
-    my_map_theme()
-}
-
-```
-  
-  
+Vaccination Rate by County
 
 ```{r}
-library(openintro)
+##### VACCINATION RATE by county
 
-source("covid_study_data_plotter.R")
-```
+vaccination_data = get_vaccination_rates_data(date = "2021/09/24")
 
-
-```{r}
-### Vaccination Rate by HHR Choropleth Function
-
-### Stat Selectable Interactive Graph of Vaccination Rates by HRR
-# Values for `display_stat`:
-#         vacc_complete_percent: Percentage of people fully vaccinated in that HRR
-#         single_dose_percent:   Percentage of people with one vaccine dose in that HRR
-# Date must be given in yyyymmdd format
-TEST <- function(date, display_stat, is_scale_range_adaptive = F) {
-
-    # translate input params
-  stat_label = paste0(possible_axis_labels[display_stat])
-  graph_stat = rlang::parse_expr(display_stat)
-  valid_data_dates = closest_valid_dates(date)
+vaccination_data = us_county_shape_data %>% 
+  left_join(vaccination_data, by = "fips") 
   
-  # GET VACCINATION STATS
-  vaccination_data = calculate_hrr_vaccination_rates(valid_data_dates[1])
-  
-  # COMBINE WITH HHR SHAPES
-  hrr_ggplot_data = hrr_shape_data %>% 
-    left_join(vaccination_data, by = c("HRRNUM" = "hrrnum")) %>% 
-    select(!HRR)  %>% 
-    st_transform(crs= "EPSG:2163") %>% 
-    mutate(text = paste0(
-      "HRR #: ", HRRNUM,
-      "</b>\nState: ", HRRSTATE_long, 
-      "</b>\nFully Vaccinated: ", format(vacc_complete_percent, digits = 4), "%",
-      "</b>\nHad Single Dose: ", format(single_dose_percent, digits = 4), "%",
-      "</b>\nZip Code Count: ", hrr_population_zip_slice$zip_count[HRRNUM],
-      "</b>\nHRR Pop: ", hrr_population_zip_slice$population[HRRNUM]))
-  
-  # GET SHAPE OF NA ZONES
-  na_value_shapes = hrr_ggplot_data %>% 
-    filter(is.na(!!graph_stat))
-  
-  
-  # REMOVE TRACES THAT ARE COVERED 
-  # (for performance when converting to plotly)
-  hrr_ggplot_data = hrr_ggplot_data %>% 
-    filter(!is.na(!!graph_stat))
-  
-  # CALCULATE LIMITS OF THE SCALE
-  scale_limits = c(0,1)
-  if (is_scale_range_adaptive) {
-    max = max(vaccination_data[,display_stat])
-    min = min(vaccination_data[,display_stat])
-    scale_limits = c(min/100, max/100) #make percentage
-  }  
-  
-p = hrr_ggplot_data %>% 
-      ggplot() +
-      geom_sf(                                  # HRR data
-        aes(fill = !!graph_stat/100 + runif(nrow(hrr_ggplot_data), min=0, max=0.001), 
-            text=text), 
-        linewidth = 0.1, 
-        color=alpha("darkgreen",0.8))
-
-if (nrow(na_value_shapes) > 0) {
-   p = p + geom_sf(data = na_value_shapes,            # regions with NA values (for tooltip value) - trace 290
-          fill = "gray",
-          color="gray")
-}
-
-  p + geom_sf(data = us_state_shape_data,        # borders: trace 291 (skip hover info)
-          fill = alpha("black", 0.0)) +   
-  scale_fill_continuous(
-    stat_label, 
-    type = "viridis", 
-    labels = scales::percent, breaks = c(0, .2, .40, .60, .8, 1),  
-    limits = scale_limits) +
+vaccination_data %>% 
+  ggplot() +
+  geom_sf(aes(fill = series_complete_pop_pct/100)) +
+  scale_fill_continuous("Fully Vaccinated", low="red", high="yellow", labels = scales::percent) +
+  ggtitle("COVID Vaccination Status", subtitle = "Percentage of county population that is fully vaccinated (from CDC)") +
   my_map_theme()
 
-}
-
-
-TEST("2021/09/24", display_stat = "vacc_complete_percent") %>% 
-
-ggplotly(tooltip = "text") %>% 
-      style(hoveron = "fills") %>% 
-      style(text = "No Data for HRR", traces = length(.$x$data)-2) %>%  # skip 2nd to last (NA values shape)
-      style(hoverinfo = "skip", traces = length(.$x$data)-1)            # skip last trace (borders)
 ```
 
-
-FIND NUMBER OF TRACES
-
-```{r}
-### Vaccination Rate by HHR Choropleth Function
-
-### Stat Selectable Interactive Graph of Vaccination Rates by HRR
-# Values for `display_stat`:
-#         vacc_complete_percent: Percentage of people fully vaccinated in that HRR
-#         single_dose_percent:   Percentage of people with one vaccine dose in that HRR
-# Date must be given in yyyymmdd format
-TEST <- function(date, display_stat, is_scale_range_adaptive = F) {
-
-    # translate input params
-  stat_label = paste0(possible_axis_labels[display_stat])
-  graph_stat = rlang::parse_expr(display_stat)
-  valid_data_dates = closest_valid_dates(date)
-  
-  # GET VACCINATION STATS
-  vaccination_data = calculate_hrr_vaccination_rates(valid_data_dates[1])
-  
-  # COMBINE WITH HHR SHAPES
-  hrr_ggplot_data = hrr_shape_data %>% 
-    left_join(vaccination_data, by = c("HRRNUM" = "hrrnum")) %>% 
-    select(!HRR)  %>% 
-    st_transform(crs= "EPSG:2163") %>% 
-    mutate(text = paste0(
-      "HRR #: ", HRRNUM,
-      "</b>\nState: ", HRRSTATE_long, 
-      "</b>\nFully Vaccinated: ", format(vacc_complete_percent, digits = 4), "%",
-      "</b>\nHad Single Dose: ", format(single_dose_percent, digits = 4), "%",
-      "</b>\nZip Code Count: ", hrr_population_zip_slice$zip_count[HRRNUM],
-      "</b>\nHRR Pop: ", hrr_population_zip_slice$population[HRRNUM]))
-  
-  # GET SHAPE OF NA ZONES
-  na_value_shapes = hrr_ggplot_data %>% 
-    filter(is.na(!!graph_stat))
-  
-
-  # CALCULATE LIMITS OF THE SCALE
-  scale_limits = c(0,1)
-  if (is_scale_range_adaptive) {
-    max = max(vaccination_data[,display_stat])
-    min = min(vaccination_data[,display_stat])
-    scale_limits = c(min/100, max/100) #make percentage
-  }  
-  
-hrr_ggplot_data %>% 
-    ggplot() +
-    geom_sf(                                  # HRR data
-      aes(fill = !!graph_stat/100 + runif(nrow(hrr_ggplot_data), min=0, max=0.001), 
-          text=text), 
-      linewidth = 0.1, 
-      color=alpha("darkgreen",0.8)) +         
-    geom_sf(data = us_state_shape_data,        # borders: trace 291 (skip hover info)
-            fill = alpha("black", 0.0)) +   
-    scale_fill_continuous(
-      stat_label, 
-      type = "viridis", 
-      labels = scales::percent, breaks = c(0, .2, .40, .60, .8, 1),  
-      limits = scale_limits) +
-    my_map_theme()
-
-}
-
-
-g = TEST("2021/02/24", display_stat = "vacc_complete_percent")
-
-
-p <- ggplotly(g, tooltip = "text") %>% 
-  style(hoveron = "fills")
-
-length(p$x$data)
-
-p %>% 
-  style(hoverinfo = "skip", traces = length(.$x$data)-1) # skip last trace
-
-#plotly_json(p)
-```
-
-
-304 - 290 = 14
 
 ...
 
