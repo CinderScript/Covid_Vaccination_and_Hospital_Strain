@@ -15,7 +15,7 @@ source("covid_study_data_plotter.R")
 
 View the Shiny App here: https://cinderscript.shinyapps.io/Covid-Vaccination-and-Hospital-Strain/
 
-This project is available on [GitHub](https://www.washingtonpost.com/health/2021/09/23/covid-vaccination-hospitalization-map/)
+This project is available on [GitHub](https://github.com/CinderScript/Covid_Vaccination_and_Hospital_Strain)
 
 ## About
 
