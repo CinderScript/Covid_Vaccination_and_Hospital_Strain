@@ -14,6 +14,11 @@ possible_axis_choices <- c(
   "Hospital Beds Used for Covid"  = "covid_bed_usage_ratio",
   "Covid Bed to Total Bed Usage"  = "covid_bed_usage_total_bed_usage_ratio")
 
+possible_color_choices <- c(
+  "Washington Post"   = "wp_palette",
+  "Red Blue Palette"   = "rb_palette",
+  "Soft Purple Green"   = "spg_palette")
+
 
 #############################
 ######### SHINY UI ########## 
@@ -45,11 +50,23 @@ ui <- htmlTemplate(
                                     selected = "covid_bed_usage_ratio"),
   
   hosp_plot_date_select = sliderInput( "hosp_vacc_plot_date",
-                                       "Select Date::",
+                                       "Select Date:",
                                        min = as.Date("2020-12-13", "%Y-%m-%d"),
                                        max = as.Date("2023-03-03", "%Y-%m-%d"),
                                        value = as.Date("2021/09/24"),
                                        timeFormat="%Y-%m-%d"),
+
+  color_palette_select = selectInput( "selected_color_palette",
+                                    "Color Palette:",
+                                    choices = possible_color_choices, 
+                                    selected = "wp_palette"),
+  
+  wp_map_date_select = sliderInput( "wp_map_date",
+                                    "Select Date:",
+                                    min = as.Date("2020-12-13", "%Y-%m-%d"),
+                                    max = as.Date("2023-03-03", "%Y-%m-%d"),
+                                    value = as.Date("2021/09/24"),
+                                    timeFormat="%Y-%m-%d"),
   
   graph = uiOutput("graph"),
   
@@ -60,7 +77,11 @@ ui <- htmlTemplate(
   hospitalization_data_date = textOutput("bed_data_date"),
   
   is_plot_dynamic = checkboxInput("is_plot_dynamic", "Interactive Graph", F),
-  is_scale_adaptive = checkboxInput("is_scale_adaptive", "Adaptive Scale", F)
+  is_scale_adaptive = checkboxInput("is_scale_adaptive", "Adaptive Scale", F),
+  graph_size_slider = numericInput("num", 
+                        h3("Numeric input"), 
+                        value = 1)  
+
 )
 
 ##################################
@@ -73,28 +94,39 @@ server <- function(input, output, session) {
   ### For a function to trigger, a reactive value must be inside that function
   vacc_map_date <- reactive(as.Date(input$vacc_map_date))
   hosp_plot_date <- reactive(as.Date(input$hosp_vacc_plot_date))
+  wp_map_date <- reactive(as.Date(input$wp_map_date))
+  
   vacc_stat <- reactive(input$vacc_map_stat)
   x_axis_stat <- reactive(input$selected_x_axis_stat)
   y_axis_stat <- reactive(input$selected_y_axis_stat)  
+  
+  wp_color_palette <- reactive(input$selected_color_palette)
+
   is_adaptive <- reactive(input$is_scale_adaptive)
   active_tab <- reactive(input$active_tab)
-  
+
+  graph_size <- reactive(input$size_slider_value)
+
+
   ### RENDER GRAPH
   output$graph <- renderUI({
 
     #### to make renderUI trigger on changes of these controls
     vacc_map_date()
     hosp_plot_date()
+    wp_map_date()
+    wp_color_palette()
     vacc_stat()
     x_axis_stat()
     y_axis_stat()
     is_adaptive()
-    active_tab()
+
+    print(active_tab())
     
     if (input$is_plot_dynamic) {
-      plotlyOutput("vacc_graph_dynamic") %>% withSpinner()
+      plotlyOutput("vacc_graph_dynamic", height = graph_size(), width = "100%") %>% withSpinner()
     } else {
-      plotOutput("vacc_graph_static") %>% withSpinner()
+      plotOutput("vacc_graph_static", height = graph_size(), width = "100%") %>% withSpinner()
     }
   })
   
@@ -129,13 +161,24 @@ server <- function(input, output, session) {
           is_scale_adaptive = is_adaptive())
       }
       else if(active_tab() == "nav_hosp_plot_tab"){
-        print("GRAPHING HOSP PLOT!")
-        print(paste("X =", x_axis_stat()))
-        print(paste("Y =", y_axis_stat()))
         Graph_Vaccination_Hospitalization_Plot_Static(
           date = as.Date(hosp_plot_date()), 
           x_axis = x_axis_stat(),
           y_axis = y_axis_stat())
+      }
+      else if(active_tab() == "nav_wp_map_tab") {
+        bivariate_palette = NULL
+
+        if( wp_color_palette() == "wp_palette")
+            bivariate_palette = generate_bivariate_palette(get_wp_palette())
+        else if(wp_color_palette() == "rb_palette")
+            bivariate_palette = generate_bivariate_palette(get_rb_palette())
+        else if(wp_color_palette() == "spg_palette")
+            bivariate_palette = generate_bivariate_palette(get_soft_pg_palette())
+
+        Graph_Bivariate_Covid_Map(
+          date = as.Date(wp_map_date()), 
+          bivariate_palette)
       }
     })
   

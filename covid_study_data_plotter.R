@@ -1,4 +1,5 @@
 library(plotly)
+library(cowplot)
 
 source("covid_study_data_wrangler.R")
 
@@ -47,6 +48,99 @@ my_map_theme <- function(){
         axis.text=element_blank(),
         axis.ticks=element_blank(),
         axis.title=element_blank())
+}
+
+get_wp_palette <- function() {
+  c("#d3d3d3", "#c9abcf", "#bf81ca", "#b453c5", "#acceb1", "#a4a7ad", "#9c7ea9", "#9351a5", "#7fc88a", "#79a287", "#737b84", "#6d4f81", "#49c15b", "#459c59", "#427657", "#3e4c55")
+}
+
+get_rb_palette <- function() {
+  c("#d3d3d3", "#a6bddb", "#72a8e3", "#0093e8", "#cea5af", "#a294b5", "#6f83bb", "#0073c0", "#c9748a", "#9f6890", "#6c5c94", "#005198", "#c52f64", "#9c2a68", "#6a266b", "#00216e")
+}
+
+get_soft_pg_palette <- function() {
+  c("#d3d3d3", "#accaca", "#81c1c1", "#52b6b6", "#c6acc1", "#a2a5b9", "#799db0", "#4d94a6", "#ba85b0", "#977fa8", "#7279a0", "#487397", "#ad5b9c", "#8d5796", "#6a538f", "#434e87")
+}
+
+generate_bivariate_palette <- function(colors){
+  color_palette <- expand.grid(x = 1:4, y = 1:4)
+  
+  # add a colors column to the data frame using every combination of indexes 1 through 4 for x and y
+  color_palette$color <- colors[((color_palette$y - 1) * 4) + color_palette$x]
+  return(color_palette)
+}
+
+
+### Static Bivariate Choropleth of Vaccination Rates and Hosp. Bed Usage by HRR
+#
+# Values for `x_axis` and `y_axis`:
+#         vacc_complete_percent: Percentage of people fully vaccinated in that HRR
+#         covid_bed_usage_ratio:                   Percentage of beds used for COVID in HRR
+#
+# Date must be given in yyyymmdd format
+Graph_Bivariate_Covid_Map <- function(date, color_palette){
+  
+  
+  # define cutpoints for percentages
+  vacc_cutpoints <- c(-1, 40, 50, 65, 100)      # percentage value
+  bed_cutpoints <- c(-1, 8, 12, 16, 100)       # percentage value
+  labels <- c(1, 2, 3, 4)                      # the axis values
+  
+  
+  
+  ### GET ALL NEEDED DATA
+  dates = closest_valid_dates(ymd(date))
+  bivariate_data = calculate_bivariate_covid_vaccination_hospital_bed_aggrigate(dates) %>% 
+    select(vacc_complete_percent, covid_bed_usage_ratio, hrrnum) %>% 
+    
+    #    drop_na() %>%                                         #drop unplottable rows
+    
+    mutate(x = cut(vacc_complete_percent, breaks = vacc_cutpoints, labels = labels), 
+           y = cut(covid_bed_usage_ratio, breaks = bed_cutpoints, labels = labels)) %>% 
+    
+    unite(color_id, c("x", "y"), sep = "")
+  
+  #  return(bivariate_data)
+  
+  hrr_ggplot_data = hrr_shape_data %>% 
+    left_join(bivariate_data, by = c("HRRNUM" = "hrrnum")) %>% 
+    select(!HRR)  %>% 
+    st_transform(crs= "EPSG:2163")
+  
+  #THE MAP  
+  map = hrr_ggplot_data %>% 
+          ggplot(aes(fill = color_id)) +
+          geom_sf( linewidth = 0, color=alpha("black",0.05)) +
+          
+          geom_sf(data = us_state_shape_data, fill = alpha("black", 0.0)) +
+          scale_fill_manual(values = color_palette$color) +
+          my_map_theme() +
+          theme(legend.position="none")
+  
+  #THE LEGEND  
+  legend <- ggplot() +
+    geom_tile(
+      data = color_palette,
+      mapping = aes(
+        x = x,
+        y = y,
+        fill = color)
+    ) +
+    scale_fill_identity() +
+    labs(x = "Higher Hospitalization ⟶️>",
+         y = "Higher Vaccination ⟶️>") +
+    theme(
+      axis.title = element_text(size = 14)
+    ) +
+    theme(panel.background=element_blank(),
+          axis.text=element_blank(),
+          axis.ticks=element_blank()) +
+    coord_fixed()
+  
+  # ALL TOGETHER NOW
+  ggdraw() +
+    draw_plot(map, x = 0, y = -0.05, width = 1, height = 1, scale = 1) +
+    draw_plot(legend, 0.62, 0.75, 0.25, 0.25)
 }
 
 
