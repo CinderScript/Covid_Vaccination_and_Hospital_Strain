@@ -239,10 +239,17 @@ vaccination_data %>%
 
 # Bivariate Choropleth
 
+In order to copy the washington post graph, I decided to figure out how to create a bivariate 
+color palette with a simple dataset first, rather than working with covid data.
+
 
 ### Make a bivariate color palette
 
-Starting with a color scale generated from a website, create a color palette.
+Starting with a color scale generated from [Observable HQ](https://observablehq.com/@benjaminadk/bivariate-choropleth-color-generator), 
+create a color palette by adding each of the colors in the appropriate order. To make sure the order is correct, create a list of (x, y) values. If it 
+is a 16 color palette, then there should be 4 values for each axis. To match the order of colors given by the generator, The order of the x-y pairings 
+should look like (1, 1); (2, 1); (3, 1); (4, 1); (1, 2); (2, 2); (2, 3)... When the colors are plotted with their x and y values, the color pattern 
+will be consistent with those given by the online generator.
 
 
 ```{r}
@@ -262,17 +269,15 @@ color_palette %>%
     	geom_tile(aes(fill = color)) +
     	scale_fill_identity() + 
       coord_fixed()
-
-
 ```
 
-I have arranged the x and y sequence so that the lowest numbers correlate to light colors
+The x and y sequence is arranged so that the lowest values correlate to light colors
 So, we need to create and 'id' from two different values that correspond to 1-4  for both x and y.
 I think it is easiest to cut the two values into numbers from 1 to 4 and then join those columns together 
 to get the "xy" id.  The colors have already been arranged in this order as can be seen from the 
 color plot above.
 
-#### Test the method used
+#### Testing
 
 We will first test by mapping to random numbers random x and y values to us counties and then creating an xy id.
 
@@ -307,7 +312,7 @@ ggplot(map_data) +
 ```
 
 
-# Washington Post Map
+## Washington Post Map
 
 ```{r}
 
@@ -315,6 +320,23 @@ Graph_Bivariate_Covid_Map("2021-09-23", generate_bivariate_palette(get_wp_palett
 Graph_Bivariate_Covid_Map("2021-09-23", generate_bivariate_palette(get_rb_palette()))
 
 ```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 ...
 

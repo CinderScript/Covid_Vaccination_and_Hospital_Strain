@@ -9,7 +9,7 @@ This is a study of vaccination rate and hospital bed usage in the United States 
 
 #### **Map By Zach Levitt and Dan Keating:**
 
-![Washington Post Bivariate Choropleth Map](washington-post-map.png)
+![Washington Post Bivariate Choropleth Map](www/washington-post-map.png)
 
 ## Methods
 
@@ -154,9 +154,11 @@ Processed by Source: `covid_study_data_wrangler.R`, which creates functions for 
 
 ### Texas
 There is a lot of missing data for both hospital bed usage and vaccination rates. TEXAS records 
-before 2021-10-22 are removed. Before 2021-10-22, Texas does not have recorded vaccination 
+before 2021-10-22 are removed. Before 2021-10-22, Texas had problems with their recorded vaccination 
 rates and they are recorded as '0' in the dataframes. These records are removed so they don't 
 throw off the percentages of graphed stats and automatic range scaling of the graphs.
+
+Information: https://www.texastribune.org/2021/01/20/texas-coronavirus-vaccine-data/
 
 ### Nonsensical Data
 Replace 0% single dose percentages with NA where appropriate
@@ -182,3 +184,150 @@ Source File                   |  Description
 Source Dependency:
 
 `app.R` --> `covid_study_data_plotter.R` --> `covid_study_data_wrangler.R` --> `covid_study_data_loader.R`
+
+
+# Example Graphs
+
+Load project source files
+
+```{r}
+source("covid_study_data_plotter.R")
+```
+
+
+### Hospital bed usage vs Vaccination Percentage of HRR
+```{r}
+graph_plotly_point_plot(
+  Graph_Vaccination_Hospitalization_Plot("2021-09-23", x_axis = "vacc_complete_percent", y_axis = "covid_bed_usage_ratio")
+)
+```
+
+
+### Choropleth Graph of Vaccination Stats by HRR
+
+```{r}
+Graph_Vaccination_Rates_Choropleth_By_Hrr_Static("2021/09/24", display_stat = "vacc_complete_percent")
+graph_plotly_vacc_choropleth(Graph_Vaccination_Rates_Choropleth_By_Hrr("2021/09/24", display_stat = "single_dose_percent", is_scale_adaptive = F))
+```
+
+
+### misc
+
+Vaccination Rate by County
+
+```{r}
+##### VACCINATION RATE by county
+
+vaccination_data = get_vaccination_rates_data(date = "2021/09/24")
+
+vaccination_data = us_county_shape_data %>% 
+  left_join(vaccination_data, by = "fips") 
+  
+vaccination_data %>% 
+  ggplot() +
+  geom_sf(aes(fill = series_complete_pop_pct/100)) +
+  scale_fill_continuous("Fully Vaccinated", low="red", high="yellow", labels = scales::percent) +
+  ggtitle("COVID Vaccination Status", subtitle = "Percentage of county population that is fully vaccinated (from CDC)") +
+  my_map_theme()
+
+```
+
+
+# Bivariate Choropleth
+
+In order to copy the washington post graph, I decided to figure out how to create a bivariate 
+color palette with a simple dataset first, rather than working with covid data.
+
+
+### Make a bivariate color palette
+
+Starting with a color scale generated from [Observable HQ](https://observablehq.com/@benjaminadk/bivariate-choropleth-color-generator), 
+create a color palette by adding each of the colors in the appropriate order. To make sure the order is correct, create a list of (x, y) values. If it 
+is a 16 color palette, then there should be 4 values for each axis. To match the order of colors given by the generator, The order of the x-y pairings 
+should look like (1, 1); (2, 1); (3, 1); (4, 1); (1, 2); (2, 2); (2, 3)... When the colors are plotted with their x and y values, the color pattern 
+will be consistent with those given by the online generator.
+
+
+```{r}
+library(tidyverse)
+
+#https://observablehq.com/@benjaminadk/bivariate-choropleth-color-generator
+
+colors = c("#d3d3d3", "#a6bddb", "#72a8e3", "#0093e8", "#cea5af", "#a294b5", "#6f83bb", "#0073c0", "#c9748a", "#9f6890", "#6c5c94", "#005198", "#c52f64", "#9c2a68", "#6a266b", "#00216e")
+
+color_palette <- expand.grid(x = 1:4, y = 1:4)
+
+# add a colors column to the data frame using every combination of indexes 1 through 4 for x and y
+color_palette$color <- colors[((color_palette$y - 1) * 4) + color_palette$x]
+color_palette %>% 
+    
+  ggplot(aes(x, y)) +
+    	geom_tile(aes(fill = color)) +
+    	scale_fill_identity() + 
+      coord_fixed()
+```
+
+The x and y sequence is arranged so that the lowest values correlate to light colors
+So, we need to create and 'id' from two different values that correspond to 1-4  for both x and y.
+I think it is easiest to cut the two values into numbers from 1 to 4 and then join those columns together 
+to get the "xy" id.  The colors have already been arranged in this order as can be seen from the 
+color plot above.
+
+#### Testing
+
+We will first test by mapping to random numbers random x and y values to us counties and then creating an xy id.
+
+I defined the cutpoints so that we have the percentage intervals from 0 - 10, 10 - 30, 30 - 65, 65 - 100
+
+
+```{r}
+library(albersusa)
+usa_states = counties_sf("laea")
+
+usa_states$height <- sample(0:100, nrow(usa_states), replace = TRUE)
+usa_states$width <- sample(0:100, nrow(usa_states), replace = TRUE)
+
+my_cutpoints <- c(-1, 10, 30, 65, 100)
+labels <- c(1, 2, 3, 4)
+
+map_data <- usa_states %>% 
+  select(height, width) %>% 
+  mutate(x = cut(width, breaks = my_cutpoints, labels = labels)) %>% 
+  mutate(y = cut(height, breaks = my_cutpoints, labels = labels))
+
+map_data <- map_data %>% unite(id, c("y", "x"), sep = "")
+
+
+ggplot(map_data) +
+  geom_sf(aes(fill = id)) +
+  scale_fill_manual(values = color_palette$color) +
+  my_map_theme()
+```
+
+
+## Washington Post Map
+
+```{r}
+Graph_Bivariate_Covid_Map("2021-09-23", generate_bivariate_palette(get_wp_palette()))
+Graph_Bivariate_Covid_Map("2021-09-23", generate_bivariate_palette(get_rb_palette()))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+...
+

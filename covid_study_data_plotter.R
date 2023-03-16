@@ -118,6 +118,8 @@ Graph_Bivariate_Covid_Map <- function(date, color_palette){
           theme(legend.position="none")
   
   #THE LEGEND  
+  # used Timo Grossenbacher's tutorial on bivariate legend creation which uses the cowplot package
+  # https://timogrossenbacher.ch/2019/04/bivariate-maps-with-ggplot2-and-sf/
   legend <- ggplot() +
     geom_tile(
       data = color_palette,
@@ -137,7 +139,7 @@ Graph_Bivariate_Covid_Map <- function(date, color_palette){
           axis.ticks=element_blank()) +
     coord_fixed()
   
-  # ALL TOGETHER NOW
+  # ALL TOGETHER NOW!
   ggdraw() +
     draw_plot(map, x = 0, y = -0.05, width = 1, height = 1, scale = 1) +
     draw_plot(legend, 0.62, 0.75, 0.25, 0.25)
