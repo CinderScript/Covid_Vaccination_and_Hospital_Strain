@@ -200,7 +200,6 @@ Source Dependency:
 
 ### Hospital bed usage vs Vaccination Percentage of HRR
 ```{r}
-
 graph_plotly_point_plot(
   Graph_Vaccination_Hospitalization_Plot("2021-09-23", x_axis = "vacc_complete_percent", y_axis = "covid_bed_usage_ratio")
 )
@@ -237,6 +236,85 @@ vaccination_data %>%
 
 ```
 
+
+# Bivariate Choropleth
+
+
+### Make a bivariate color palette
+
+Starting with a color scale generated from a website, create a color palette.
+
+
+```{r}
+library(tidyverse)
+
+#https://observablehq.com/@benjaminadk/bivariate-choropleth-color-generator
+
+colors = c("#d3d3d3", "#a6bddb", "#72a8e3", "#0093e8", "#cea5af", "#a294b5", "#6f83bb", "#0073c0", "#c9748a", "#9f6890", "#6c5c94", "#005198", "#c52f64", "#9c2a68", "#6a266b", "#00216e")
+
+color_palette <- expand.grid(x = 1:4, y = 1:4)
+
+# add a colors column to the data frame using every combination of indexes 1 through 4 for x and y
+color_palette$color <- colors[((color_palette$y - 1) * 4) + color_palette$x]
+color_palette %>% 
+    
+  ggplot(aes(x, y)) +
+    	geom_tile(aes(fill = color)) +
+    	scale_fill_identity() + 
+      coord_fixed()
+
+
+```
+
+I have arranged the x and y sequence so that the lowest numbers correlate to light colors
+So, we need to create and 'id' from two different values that correspond to 1-4  for both x and y.
+I think it is easiest to cut the two values into numbers from 1 to 4 and then join those columns together 
+to get the "xy" id.  The colors have already been arranged in this order as can be seen from the 
+color plot above.
+
+#### Test the method used
+
+We will first test by mapping to random numbers random x and y values to us counties and then creating an xy id.
+
+I defined the cutpoints so that we have the percentage intervals from 0 - 10, 10 - 30, 30 - 65, 65 - 100
+
+
+```{r}
+library(albersusa)
+usa_states = counties_sf("laea")
+
+usa_states$height <- sample(0:100, nrow(usa_states), replace = TRUE)
+usa_states$width <- sample(0:100, nrow(usa_states), replace = TRUE)
+
+my_cutpoints <- c(-1, 10, 30, 65, 100)
+labels <- c(1, 2, 3, 4)
+
+map_data <- usa_states %>% 
+  select(height, width) %>% 
+  mutate(x = cut(width, breaks = my_cutpoints, labels = labels)) %>% 
+  mutate(y = cut(height, breaks = my_cutpoints, labels = labels))
+
+map_data <- map_data %>% unite(id, c("y", "x"), sep = "")
+
+
+ggplot(map_data) +
+  geom_sf(aes(fill = id)) +
+  scale_fill_manual(values = color_palette$color) +
+  my_map_theme()
+
+
+
+```
+
+
+# Washington Post Map
+
+```{r}
+
+Graph_Bivariate_Covid_Map("2021-09-23", generate_bivariate_palette(get_wp_palette()))
+Graph_Bivariate_Covid_Map("2021-09-23", generate_bivariate_palette(get_rb_palette()))
+
+```
 
 ...
 

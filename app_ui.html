@@ -29,11 +29,18 @@
                 <button class="nav-link shiny-bound-input" id="nav_hosp_plot_tab" data-bs-toggle="tab" data-bs-target="#nav-hosp-plot" 
                     type="button" role="tab" aria-controls="nav-hosp-plot" aria-selected="false">
                     Covid and Healthcare</button>
+
+                <button class="nav-link shiny-bound-input" id="nav_wp_map_tab" data-bs-toggle="tab" data-bs-target="#nav-wp-map"
+                    type="button" role="tab" aria-controls="nav-wp-map" aria-selected="false">
+                    Washington Post</button>
+
                 <button class="nav-link shiny-bound-input" id="nav_about_tab" data-bs-toggle="tab" data-bs-target="#nav-about"
                     type="button" role="tab" aria-controls="nav-about" aria-selected="false">
                     About</button>
+                    
             </div>
         </nav>
+
         <div class="tab-content" id="nav-tabContent">
             <div class="tab-pane fade show active" id="nav-vacc-map" role="tabpanel" aria-labelledby="nav-vacc-map-tab">
                 <!--Controls for Vaccination Map Options-->
@@ -49,6 +56,7 @@
                     </div>
                 </div>
             </div>
+
             <div class="tab-pane fade" id="nav-hosp-plot" role="tabpanel" aria-labelledby="nav_hosp_plot_tab">
                 <p class="mt-2 mb-4">The following scatter plot displays the relationship between covid vaccination rates and hospital bed usage. 
                     Each point represents a hospital referral region.
@@ -65,6 +73,27 @@
                     </div>
                 </div>
             </div>
+
+            <div class="tab-pane fade" id="nav-wp-map" role="tabpanel" aria-labelledby="nav_wp_map_tab">
+                <!--Controls for Vaccination Map Options-->
+                <p class="mt-2 mb-4">The following is my recreation of the Washington Post map than inspired this project. Click 
+                    <a href="https://www.washingtonpost.com/health/2021/09/23/covid-vaccination-hospitalization-map/">here</a> to visit the article.
+                </p>
+                <p>
+                    Color scale x-axis (purple): Number of inpatient hospital beds taken by covid-19 patients out of 100 beds. The range is 0-8, 8-12, 12-16, and 16+.
+                    <br>
+                    Color scale y-axis (green): Percentage of the region's population that is fully vaccinated. The range is 0% - 40% - 50% - 60% - 100%.
+                </p>
+                <div class="row">
+                    <div class="col-auto mx-3">
+                        {{color_palette_select}}
+                    </div>
+                    <div class="col-auto mx-3">
+                        {{wp_map_date_select}}
+                    </div>
+                </div>
+            </div>
+            
             <div class="tab-pane fade" id="nav-about" role="tabpanel" aria-labelledby="nav_about_tab">
                 <div class="mt-2" id="about-page">
                     <h3>Project Description</h3>
@@ -270,6 +299,10 @@
             {{graph}}
             {{is_plot_dynamic}}
             {{is_scale_adaptive}}
+            <div>
+                <label for="graph_size_slider" class="form-label small font-weight-bold mt-3  mb-0">Graph Size</label>
+                <input type="range" class="form-range mt-0" min="200" max="1000" step="25" id="graph_size_slider">
+            </div>
             <hr class="my-4">
             {{vaccination_data_date}}        
             {{hospitalization_data_date}}    
