@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <!-- Required meta tags -->
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet"
+        integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC" crossorigin="anonymous">
+
+    {{headContent()}}
+    <title>Covid and Healthcare</title>
+</head>
+
+<body>
+    <div class="container">
+
+        <h1 class="mt-5">Effects of Vaccination on Healthcare</h1>
+        <p class="lead mt-2">A study of covid-19, vaccination, and hospital capacity across the continental U.S.</p>
+
+        <nav>
+            <div class="nav nav-tabs mt-5" id="graph_select_tab" role="tablist">
+                <button class="nav-link shiny-bound-input active" id="nav_vacc_map_tab" data-bs-toggle="tab" data-bs-target="#nav-vacc-map" 
+                    type="button" role="tab" aria-controls="nav-vacc-map" aria-selected="true">
+                    Vaccination Map</button>
+
+                <button class="nav-link shiny-bound-input" id="nav_hosp_plot_tab" data-bs-toggle="tab" data-bs-target="#nav-hosp-plot" 
+                    type="button" role="tab" aria-controls="nav-hosp-plot" aria-selected="false">
+                    Covid and Healthcare</button>
+                <button class="nav-link shiny-bound-input" id="nav_about_tab" data-bs-toggle="tab" data-bs-target="#nav-about"
+                    type="button" role="tab" aria-controls="nav-about" aria-selected="false">
+                    About</button>
+            </div>
+        </nav>
+        <div class="tab-content" id="nav-tabContent">
+            <div class="tab-pane fade show active" id="nav-vacc-map" role="tabpanel" aria-labelledby="nav-vacc-map-tab">
+                <!--Controls for Vaccination Map Options-->
+                <p class="mt-2 mb-4">The following map displays vaccination rates across healthcare referral region (hrr) in the US. HRRs consist of groupings of 
+                    of zip codes and contain at least one hospital that performs major cardiovascular procedures and neurosurgery.
+                </p>
+                <div class="row">
+                    <div class="col-auto mx-3">
+                        {{vacc_map_stat_select}}
+                    </div>
+                    <div class="col-auto mx-3">
+                        {{vacc_map_date_select}}
+                    </div>
+                </div>
+            </div>
+            <div class="tab-pane fade" id="nav-hosp-plot" role="tabpanel" aria-labelledby="nav_hosp_plot_tab">
+                <p class="mt-2 mb-4">The following scatter plot displays the relationship between covid vaccination rates and hospital bed usage. 
+                    Each point represents a hospital referral region.
+                </p>
+                <div class="row">
+                    <div class="col-auto mx-3">
+                        {{hosp_plot_x_select}}
+                    </div>
+                    <div class="col-auto mx-3">
+                        {{hosp_plot_y_select}}
+                    </div>
+                    <div class="col-auto mx-3">
+                        {{hosp_plot_date_select}}
+                    </div>
+                </div>
+            </div>
+            <div class="tab-pane fade" id="nav-about" role="tabpanel" aria-labelledby="nav_about_tab">
+                <div class="mt-2" id="about-page">
+                    <h3>Project Description</h3>
+                    <p>This is a study of vaccination rate and hospital bed usage in the United States inspired by the Washington Post article
+                    <a href="https://www.washingtonpost.com/health/2021/09/23/covid-vaccination-hospitalization-map/">Mapping America's hospitalization and vaccination
+                    divide</a>. In this project we will be recreating part of the USA map found in the article and adding interactivity so different dates and variables can be
+                    visualized.</p>
+                    
+                    <figure class="figure">
+                        <img src="washington-post-map.png" class="img-fluid rounded-top" alt="">
+                        <figcaption class="figure-caption text-right">Map By Zach Levitt and Dan Keating (Sep. 23, 2021)</figcaption>
+                    </figure>
+
+                    
+                    <hr>
+                    <h3>Methods</h3>
+                    <p>
+                        Vaccination data is provided at the county level by the CDC and hospital bed usage data is provided by HealthData.gov.
+                        These variables are visualized with a bivariate choropleth map of Hospital Referral Regions in the United States.
+                        <br><br>
+                        Vaccination Rate is defined by county and HRRs are defined by zip code. We can't use county data to calculate the
+                        vaccination rate of an HRR because these regions overlap. Zip codes in one HRR can live in different counties, and Zip
+                        codes in different counties can live in the same HRR.
+                    </p>
+                    <p class="lead">
+                        We need to know both the population of each HRR and the vaccination rate of each part of that population.
+                    </p>
+                    <p>
+                        We determine the vaccination rate of the HHRs by averaging the vaccination rate (given by county) of the zip codes in
+                        that HRR. The individual zip code's vaccination rate needs to be weighted by that zip code's population. Population data
+                        is obtained from the United States Census Bureau, which is unfortunately not counted by zip code, but by blocks that
+                        make up the congressional districts. To estimate the population of zip codes, we will use the 2010 census zip code
+                        tabulation records, which approximate the zip codes in which the congressional district blocks lay.
+                        <br><br>
+                        To find all zip codes in an HRR we will use a Zip Code to HRR crosswalk.
+                    </p>
+                    
+                    <h3>Data Sources</h3>
+                    <hr>
+                    <ol class="list">
+                        <li>Hospital Bed Usage in USA - per hospital</li>
+                        <li>Vaccination Rates in USA - per county</li>
+                        <li>Population Census in USA - per zcta</li>
+                        <li>HRR Geography in USA - per HRR number</li>
+                        <li>County Geography in USA - per county</li>
+                        <li>Crosswalk for Zip Code and HRR number</li>
+                    </ol>
+                    <h4>Local Data Caching</h4>
+                    <p>
+                        All data sources are downloaded from the internet. Only the needed portions of the datasets are requested from the
+                        corresponding endpoints. Before downloading, this application first checks if the dataset has already been downloaded in
+                        a local cache file. Whenever a new portion of a dataset is downloaded, it is saved to the cache folder local to the
+                        application folder.
+                    </p>
+
+                    <h4>Vaccination Rates Data per US County</h4>
+                    <p>
+                        Vaccination rates are obtained from the 
+                        <a href="https://data.cdc.gov/Vaccinations/COVID-19-Vaccinations-in-the-United-States-County/8xkx-amqh">CDC</a>.   
+                        This dataset is large, so instead of downloading the whole dataset, this application accesses 
+                        it through the Socrata Open Data API (SODA) and retrieves only the relevant rows and columns.
+                        <br><br>
+                        The “COVID-19 Vaccinations in the United States,County” data provides counts and percentages of people who have been
+                        vaccinated in each county of the United States.
+                    </p>
+
+                    <h4>Hospital Capacity Data of USA per Hospital</h4>
+                    <p>
+                        Hospital bed usage counts is obtained from 
+                        <a href="https://healthdata.gov/Hospital/COVID-19-Reported-Patient-Impact-and-Hospital-Capa/anag-cw7u">HealthData.gov</a>. 
+                        This dataset is large, so instead of downloading the whole dataset, this application accesses it through the SODA API 
+                        and retrieves only the relevant rows and columns.
+                        <br><br>
+                        The “COVID-19 Reported Patient Impact and Hospital Capacity by Facility” data provides counts on hospital bed
+                        utilization that is aggregated weekly.
+                    </p>
+
+                    <h4>Population Census Data</h4>
+                    <p>
+                        Population data is obtained from the United States Census Bureau using their 2010 ZCTA to County Relationship File:
+                        <a href="https://healthdata.gov/Hospital/COVID-19-Reported-Patient-Impact-and-Hospital-Capa/anag-cw7u">zcta_county_rel_10.txt</a>.
+                        <br>
+                        Descriptions of the columns in this dataset are found 
+                        <a href="https://www.census.gov/programs-surveys/geography/technical-documentation/records-layout/2010-zcta-record-layout.html#par_textimage_0"> here.</a>
+                    </p>
+
+                    <h4>Geographic Shape Data</h4>
+                    <p>
+                        <strong>US County Shape Data</strong>
+                        County shape data is obtained from the R package <code>Albersusa</code>.
+                        <br><br>
+                        <strong>Hospital Referral Region Shape Data</strong>
+                        Shape data for USA HRR regions are downloaded from arcgis.com using their “FeatureServer” REST api 
+                        <a href="https://www.arcgis.com/home/item.html?id=46bf6790c4e0455e9379ee9769b1a5ab">here</a>.
+                    </p>
+
+                    <h4>Crosswalk Data</h4>
+                    HRR number to zip code translation (2019) data was found at 
+                    <a href="https://data.dartmouthatlas.org/supplemental/#crosswalks">Dartmouth Atlas</a>
+                    as a zip file.
+
+                    <h3>Calculated Data</h3>
+                    <hr>
+                    <h4>Ratios for Hospital Bed Usage</h4>
+                    We must calculate:
+                    <ul>
+                        <li><b>bed_usage_ratio:</b> The ratio of hospital beds used out of 100 beds (inpatient)</li>
+                        <li><b>covid_bed_usage_ratio:</b> The ratio of hospital beds used by covid patients out of 100 beds (inpatient)</li>
+                        <li><b>covid_bed_usage_total_bed_usage_ratio:</b> The ratio of hospital beds used by covid patients out of all used beds (inpatient)</li>
+                    </ul>
+                    The hospital bed dataset contains records for each hospital. For mapping, each map region will need to represent the
+                    average of all hospitals present in that region, so these ratios must first be calculated for each hospital and then for each hospital referral region.
+
+                    <h4>Hospital Referral Region population</h4>
+                    <p>
+                        A dataset is needed that tracks the population percentages of each ZCTA in each county for the function that calculates
+                        vaccination rates of HRRs. This dataset is generated by joining ZCTA populations with zip codes. The partial populations
+                        of ZCTAs in a given zip code (due to overlapping zcta and zipcode regions) is accounted for.
+                        <br><br>
+                        Processed by Source: <code>covid_study_data_wrangler.R</code>, which creates functions for generating graph-able datasets
+                    </p>
+
+                    <h4>Calculate HHR vaccination rate</h4>
+                    <p>
+                        This is more difficult because population data comes from zip code tabulation areas from the US Census Bureau.
+                        ZCTAs will be our proxy for zip codes. Because zcta's don't line up exactly with zip codes, the same zcta can be part of
+                        more than one county. That is why it is important to know how much of the ZCTA's population is in each county.
+                        <br><br>
+                        <strong>Process for finding HHR population:</strong>
+                        <br>
+                        <ol class="list">
+                            <li>Join the vaccination data (for the date in question) with population zip code data by county.</li>
+                                <ul>
+                                    <li><i>Now we know the vaccination rate of each zip code.</i></li>
+                                </ul>
+                            <li>Join with the zip hhr crosswalk by zip code to zcta.</li>
+                                <ul>
+                                    <li><i>Now we know the hrr each zip code is in along with that zip code's vaccination rate.</i></li>
+                                </ul>
+                            <li>Join with the known population counts of zip codes by zip code.</li>
+                                <ul>
+                                    <li><i>Now we know the 'slice' of population of a zip code inside each county along with that population slice's vaccination rate.</i></li>
+                                </ul>
+                            <li>Calculate number of vaccinated people in each zip code's population 'slice' inside each county for each hrr</li>
+                            <li>Divide the number of vaccinated in zip slice by the total hrr population that zip code is in.</li>
+                                <ul>
+                                    <li><i>NThis gives us the “slice vaccination percentage” that contributes to the vaccination percentage of the hrr.</i></li>
+                                </ul>
+                            <li>Add up all of the sliced vaccination percentages for each hrr.</li>
+                        </ol>
+                        <p>
+                            Function defined in source: <code>covid_study_data_wrangler.R :: calculate_hrr_vaccination_rates(date)</code>
+                        </p>
+                    </p>
+
+                    <h3>Data Cleaning</h3>
+                    <hr>
+                    <h4>Texas</h4>
+                    <p>
+                        There is a lot of missing data for both hospital bed usage and vaccination rates. Texas records before 2021-10-22 are
+                        removed. Before 2021-10-22, Texas had problems with their recorded vaccination rates and they are recorded as '0' in the
+                        dataframes. These records are removed so they don't throw off the percentages of graphed stats and automatic range
+                        scaling of the graphs.
+                        <br><br>
+                        Information <a href="https://www.texastribune.org/2021/01/20/texas-coronavirus-vaccine-data/">on Texas records</a>.
+                    </p>
+
+                    <h4>Nonsensical Data</h4>
+                    <p>
+                        Replace 0% single dose percentages with NA where appropriate Also, Many records for the single dose == 0 while series
+                        complete is > 0. This isn't possible so these values probably were not recorded. Replace them with NA so that future
+                        data wrangling ignores those values in calculations.
+                        <br><br>
+                        By 2021-02-01 all HHR region states have some single dose percentage TX is the only state that has 0%, which we don't
+                        have collected data for. After 2021-01-31, all entries that have 0% single dose are removed. (All entries that are
+                        either before 2021-02-01 or have some percentage of single dose are kept)
+                    </p>
+
+                    <h3>Source Files</h3>
+                    <hr>
+                    <p>
+                        This project can be found on  <a href="https://github.com/CinderScript/Covid_Hospitalization_and_Vaccination">GitHub</a>
+                        <br><br>
+                        <code>covid_study_data_loader.R</code>: Loads required global data and provides functions for retrieving dynamic data.
+                        <br>
+                        <code>covid_study_data_wrangler.R</code>: Contains functions for generating useful / graph-able datasets from loaded data.
+                        <br>
+                        <code>covid_study_data_plotter.R</code>: Contains functions for generating ggplot and interactive plotly graphs.
+                        <br>
+                        <code>app_ui.html</code> and <code>app_ui.js</code>: Contains the html based template for the the Shiny UI.
+                        <br>
+                        <code>app.R</code>: Entry point into the Shiny App. Contains the Shiny server and ui.
+                    </p>
+
+                </div>
+            </div> <!-- About Tab -->
+        </div> <!-- Tab Content -->
+        
+        <div class="row mt-4">
+            <h2>{{graph_title}}</h2>
+            <h5>By Hospital Referral Region</h5>
+            <h5>{{graph_subtitle}}</h5>
+            {{graph}}
+            {{is_plot_dynamic}}
+            {{is_scale_adaptive}}
+            <hr class="my-4">
+            {{vaccination_data_date}}        
+            {{hospitalization_data_date}}    
+            <br>
+            <p>Vaccination data is from <a href="https://data.cdc.gov/Vaccinations/COVID-19-Vaccinations-in-the-United-States-County/8xkx-amqh">
+                data.cdc.gov</a>
+                <br>
+                Hospital data is from <a href="https://healthdata.gov/Hospital/COVID-19-Reported-Patient-Impact-and-Hospital-Capa/anag-cw7u">
+                healthdata.gov</a></p>
+            
+                <br>
+            <p>This project was inspired by the Washington Post article by Zach Levitt and Dan Keating found  
+                <a href="https://www.washingtonpost.com/health/2021/09/23/covid-vaccination-hospitalization-map/">here</a>. 
+                See [<b>About</b>] for more info about the data sources and methods used to make this shiny app.
+        </div>
+        
+    </div>
+
+    <br>
+    <br>
+
+    <footer class="mt-5 py-3 bg-gradient" style="background-color: lightgray;">
+        <div class="container d-flex">
+            <div class="flex-grow-1">Gregory Maynard - 2023</div>
+            <div>view on 
+                <a class="text-decoration-none" href="https://github.com/CinderScript/Covid_Hospitalization_and_Vaccination">github</a></div>
+        </div>
+    </footer>
+
+    <script type="text/javascript" src="app_ui.js"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.min.js"
+        integrity="sha384-cVKIPhGWiC2Al4u+LWgxfKTRIcfu0JTxR+EQDz/bgldoEyl4H0zUF0QKbrJ0EcQF"
+        crossorigin="anonymous"></script>
+
+</body>
+
+</html>

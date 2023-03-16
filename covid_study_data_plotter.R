@@ -29,7 +29,7 @@ closest_valid_dates <- function(date, list) {
 }
 
 # converts generated plots to an interactive plot (plotly)
-graph_plotly_choropleth <- function(graph){
+graph_plotly_vacc_choropleth <- function(graph){
   ggplotly(graph, tooltip = "text") %>% 
     style(hoveron = "fills") %>% 
     style(text = "No Data for HRR", traces = length(.$x$data)-2) %>%  # skip 2nd to last (NA values shape)
@@ -175,7 +175,7 @@ Graph_Vaccination_Hospitalization_Plot_Static <- function(date, x_axis, y_axis){
 #         vacc_complete_percent: Percentage of people fully vaccinated in that HRR
 #         single_dose_percent:   Percentage of people with one vaccine dose in that HRR
 # Date must be given in yyyymmdd format
-Graph_Vaccination_Rates_Choropleth_By_Hrr <- function(date, display_stat, is_scale_range_adaptive = F) {
+Graph_Vaccination_Rates_Choropleth_By_Hrr <- function(date, display_stat, is_scale_adaptive = F) {
   
   # translate input params
   stat_label = paste0(possible_axis_labels[display_stat])
@@ -211,7 +211,7 @@ Graph_Vaccination_Rates_Choropleth_By_Hrr <- function(date, display_stat, is_sca
   
   # CALCULATE LIMITS OF THE SCALE
   scale_limits = c(0,1)
-  if (is_scale_range_adaptive) {
+  if (is_scale_adaptive) {
     max = max(vaccination_data[,display_stat])
     min = min(vaccination_data[,display_stat])
     scale_limits = c(min/100, max/100) #make percentage
@@ -249,7 +249,7 @@ Graph_Vaccination_Rates_Choropleth_By_Hrr <- function(date, display_stat, is_sca
 #         vacc_complete_percent: Percentage of people fully vaccinated in that HRR
 #         single_dose_percent:   Percentage of people with one vaccine dose in that HRR
 # Date must be given in yyyymmdd format
-Graph_Vaccination_Rates_Choropleth_By_Hrr_Static <- function(date, display_stat, is_scale_range_adaptive = F) {
+Graph_Vaccination_Rates_Choropleth_By_Hrr_Static <- function(date, display_stat, is_scale_adaptive = F) {
   
   stat_label = paste0(possible_axis_labels[display_stat])
   graph_stat = rlang::parse_expr(display_stat)
@@ -264,7 +264,7 @@ Graph_Vaccination_Rates_Choropleth_By_Hrr_Static <- function(date, display_stat,
   
   # Find Scale limits
   scale_limits = c(0,1)
-  if (is_scale_range_adaptive) {
+  if (is_scale_adaptive) {
     max = max(vaccination_data[,display_stat])
     min = min(vaccination_data[,display_stat])
     scale_limits = c(min/100, max/100) #make percentage
