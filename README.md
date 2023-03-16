@@ -3,6 +3,8 @@
 
 # Project Description
 
+See [About.html](about.html) to view this readme with the code output rendered beneath the code sections. This is the knitted about.rmd markdown file.
+
 ## About
 
 This is a study of vaccination rate and hospital bed usage in the United States inspired by the Washington Post article [Mapping America’s hospitalization and vaccination divide](https://www.washingtonpost.com/health/2021/09/23/covid-vaccination-hospitalization-map/). In this project we will be recreating the USA map found in the article and adding interactivity so different dates and variables can be selected.
