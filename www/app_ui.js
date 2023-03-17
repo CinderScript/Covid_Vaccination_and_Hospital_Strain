@@ -2,14 +2,18 @@
 // Trigger the click event on the default active tab after the Shiny app is loaded
 // so that renderPlot or renderPlotly have the value of the selected tab on startup
 // CLICK THE DEFAULT TAB ON STARTUP
+default_tab = "nav_vacc_map_tab"
+
 $(document).on('shiny:connected', function () {
-    $('#nav_vacc_map_tab').trigger('click');
-    Shiny.setInputValue('size_slider_value', 350)
+    // VALUE OF MAP SIZE CANNOT BE NULL ON STARTUP
+    Shiny.setInputValue('size_slider_value', 350)   // set before clicking
+    Shiny.setInputValue('active_tab', default_tab);       // open default tab
 });
 
 
+
 // ENABLE AND DISABLE SHARED MAP CONTROLS
-last_tab_state = "nav_vacc_map_tab"
+last_tab_state = default_tab
 remembered_checkbox_state = false
 
 function remember_checkbox_checked_state(){
